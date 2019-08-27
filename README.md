@@ -1,3 +1,5 @@
+[![Build Status](https://travis-ci.com/xperience-ai/gap_quantization.svg?branch=master)](https://travis-ci.com/xperience-ai/gap_quantization)
+
 # Intro
 
 Placeholder for GAP8 export anf quantization module for PyTorch
@@ -5,5 +7,5 @@ Placeholder for GAP8 export anf quantization module for PyTorch
 # Install
 
 ```
-    pip3 install https://github.com/xperience-ai/gap_quantization.git
+    $ sudo pip3 install git+https://github.com/xperience-ai/gap_quantization.git
 ```
