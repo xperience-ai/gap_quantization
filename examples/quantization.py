@@ -11,7 +11,8 @@ cfg = {"bits": 16,  # number of bits to store weights and activations
        "data_source": "data",  # folder with images to collect dataset statistics
        "use_gpu": True,  # use GPU for inference
        "batch_size": 1,
-       "num_workers": 0  # number of workers for PyTorch dataloader
+       "num_workers": 0,  # number of workers for PyTorch dataloader
+       "verbose": False
        }
 
 # provide transforms that would be applied to images loaded with PIL
@@ -19,8 +20,17 @@ transforms = Compose([Resize((128, 128)),
                       ToTensor(),
                       Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
 
+
+class MyModel(nn.Module):
+    def __init__(self, input_ch, output_ch, kernel_size):
+        super(MyModel, self).__init__()
+        self.conv2d = nn.Conv2d(input_ch, output_ch, kernel_size)
+
+    def forward(self, input):
+        return self.conv2d(input)
+
 # model for quantization
-model = nn.Sequential(nn.Conv2d(3, 64, 3))
+model = MyModel(3, 64, 3)
 
 quantizer = ModelQuantizer(model, cfg, transforms)
 quantizer.quantize_model()

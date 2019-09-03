@@ -39,11 +39,12 @@ class ModelQuantizer():
             params = self.quantize_layer(module)
             if self.cfg['verbose']:
                 raise NotImplementedError
-
-            self.save_quant_params(params, name)
+            if params is not None:
+                self.save_quant_params(params, name)
 
     def quantize_layer(self, module):
-        return self.layer_quantizers[module.__class__](module)
+        if module.__class__ in self.layer_quantizers:
+            return self.layer_quantizers[module.__class__](module, self.cfg)
 
     def save_quant_params(self, params, name):
         os.makedirs(self.cfg['save_folder'], exist_ok=True)
@@ -61,11 +62,17 @@ class ModelQuantizer():
                             num_workers=self.cfg['num_workers'], drop_last=False)
         self.model.eval()
 
+        if self.cfg['use_gpu']:
+            self.model.cuda()
+
         with torch.no_grad():
             for imgs in tqdm(dataloader):
                 if self.cfg['use_gpu']:
                     imgs = imgs.cuda()
                 _ = self.model(imgs)
+
+        if self.cfg['use_gpu']:
+            self.model.cpu()
 
         for handle in handles:  # delete forward hooks
             handle.remove()

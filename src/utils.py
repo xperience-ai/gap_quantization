@@ -46,7 +46,7 @@ def round(input, float_bits, bits=16):
 class Folder(Dataset):
     def __init__(self, data_source, loader, transform):
         self.images_list = [osp.join(data_source, image_name) for image_name in os.listdir(data_source)
-                            if osp.splitext(image_name).lower() in IMG_EXTENSIONS]
+                            if osp.splitext(image_name)[1].lower() in IMG_EXTENSIONS]
         self.transform = transform
         self.loader = loader
 
@@ -54,7 +54,7 @@ class Folder(Dataset):
         return len(self.images_list)
 
     def __getitem__(self, idx):
-        img = self.loader(self.dataset[idx])
+        img = self.loader(self.images_list[idx])
         if self.transform is not None:
             img = self.transform(img)
         return img

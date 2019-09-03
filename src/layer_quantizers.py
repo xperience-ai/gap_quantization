@@ -7,16 +7,16 @@ def conv_quant(module, cfg):
 
     w_int_bits = int_bits(module.weight)
     w_frac_bits = cfg['bits'] - w_int_bits - cfg['signed']
-
-    inp_frac_bits = cfg['bits'] - module.inp_int_bits - cfg['signed']
+    assert len(module.inp_int_bits) == 1
+    inp_frac_bits = cfg['bits'] - module.inp_int_bits[0] - cfg['signed']
 
     if out_int_bits + w_frac_bits + inp_frac_bits > cfg['accum_bits'] - cfg['signed']:
         w_frac_bits -= out_int_bits + w_frac_bits + inp_frac_bits - cfg['accum_bits'] + cfg['signed']
 
     params = {'norm': max(0, out_int_bits + w_frac_bits + inp_frac_bits - cfg['bits'] + cfg['signed']),
-              'dot_place': w_frac_bits + inp_frac_bits - module.norm,
-              'weight': integerize(module.weight.data, w_frac_bits, cfg['bits']),
-              'bias': integerize(module.bias.data, cfg['bits'] - out_int_bits - cfg['signed'], cfg['bits'])}
+              'weight': integerize(module.weight.data, w_frac_bits, cfg['bits']).cpu().tolist(),
+              'bias': integerize(module.bias.data, cfg['bits'] - out_int_bits - cfg['signed'], cfg['bits']).cpu().tolist()}
+    params['dot_place'] = w_frac_bits + inp_frac_bits - params['norm']
     return params
 
 
