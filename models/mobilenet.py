@@ -1,6 +1,7 @@
 from torch import nn
 from .utils import load_state_dict_from_url
 from src.layers import Concat, EltWiseAdd
+import torch
 
 __all__ = ['MobileNetV2', 'mobilenet_v2']
 
@@ -143,7 +144,8 @@ class MobileNetV2(nn.Module):
     def forward(self, x):
         x = self.features(x)
         # x = x.mean([2, 3])
-        x = x.mean(3).mean(2)
+        x = x.view(*x.shape[:2], -1)
+        x = x.mean(2)
         x = self.classifier(x)
         return x
 
