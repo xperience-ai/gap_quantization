@@ -1,7 +1,8 @@
+import torch
 import torch.nn as nn
 from torchvision.transforms import Compose, Resize, ToTensor, Normalize
 
-from src.quantization import ModelQuantizer
+from gap_quantization.quantization import ModelQuantizer
 
 # provide quantization config
 cfg = {"bits": 16,  # number of bits to store weights and activations

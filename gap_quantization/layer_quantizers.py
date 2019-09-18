@@ -1,5 +1,5 @@
-from src.utils import integerize, int_bits
-from src.layers import *
+from gap_quantization.utils import integerize, int_bits
+from gap_quantization.layers import *
 
 
 def conv_quant(module, cfg):
