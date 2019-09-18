@@ -2,7 +2,7 @@
 
 # Intro
 
-Placeholder for GAP8 export anf quantization module for PyTorch
+Placeholder for GAP8 export and quantization module for PyTorch
 
 # Install
 
