@@ -1,5 +1,5 @@
-from functools import partial
 import json
+import logging
 import os
 import os.path as osp
 
@@ -8,20 +8,31 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 from torchvision.datasets.folder import default_loader
 
-from src.utils import int_bits, Folder
-from src.layer_quantizers import layer_quantizers
+from gap_quantization.utils import int_bits, Folder
+from gap_quantization.layer_quantizers import layer_quantizers
 
 
 def stats_hook(module, input, output):
-    module.out_int_bits = int_bits(output)
+    out_int_bits = int_bits(output)
+    if not hasattr(module, 'out_int_bits') or out_int_bits > module.out_int_bits:
+        module.out_int_bits = out_int_bits
 
     if isinstance(input, torch.Tensor):
-        module.inp_int_bits = [int_bits(input)]
-    if isinstance(input, tuple):
+        inp_int_bits = [int_bits(input)]
+    elif isinstance(input, tuple):
         inp_int_bits = []
         for inp in input:
             inp_int_bits.append(int_bits(inp))
+    else:
+        raise TypeError("Unexpected type of input: {}, "
+                        "while tuple or torch.tensor required".format(input.__class__.__name__))
+
+    if not hasattr(module, 'inp_int_bits'):
         module.inp_int_bits = inp_int_bits
+    else:
+        for idx, (curr_inp_int_bits, new_inp_int_bits) in enumerate(zip(module.inp_int_bits, inp_int_bits)):
+            if new_inp_int_bits > curr_inp_int_bits:
+                module.inp_int_bits[idx] = new_inp_int_bits
 
 
 class ModelQuantizer():
@@ -37,8 +48,6 @@ class ModelQuantizer():
 
         for name, module in self.model.named_modules():
             params = self.quantize_layer(module)
-            if self.cfg['verbose']:
-                raise NotImplementedError
             if params is not None:
                 self.save_quant_params(params, name)
 
@@ -57,9 +66,13 @@ class ModelQuantizer():
         for module in self.model.modules():
             handles.append(module.register_forward_hook(stats_hook))
 
-        dataloader = DataLoader(Folder(self.cfg['data_source'], self.loader, self.transform),
-                            batch_size=self.cfg['batch_size'], shuffle=False,
-                            num_workers=self.cfg['num_workers'], drop_last=False)
+        dataset = Folder(self.cfg['data_source'], self.loader, self.transform)
+
+        if self.cfg['verbose']:
+            logging.info('{} images are used to collect statistics'.format(len(dataset)))
+
+        dataloader = DataLoader(dataset, batch_size=self.cfg['batch_size'], shuffle=False,
+                                num_workers=self.cfg['num_workers'], drop_last=False)
         self.model.eval()
 
         if self.cfg['use_gpu']:
