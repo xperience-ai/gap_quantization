@@ -1,4 +1,3 @@
-import torch
 import torch.nn as nn
 from torchvision.transforms import Compose, Resize, ToTensor, Normalize
 
@@ -27,8 +26,9 @@ class MyModel(nn.Module):
         super(MyModel, self).__init__()
         self.conv2d = nn.Conv2d(input_ch, output_ch, kernel_size)
 
-    def forward(self, input):
-        return self.conv2d(input)
+    def forward(self, inp):
+        return self.conv2d(inp)
+
 
 # model for quantization
 model = MyModel(3, 64, 3)

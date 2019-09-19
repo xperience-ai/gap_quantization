@@ -1,5 +1,7 @@
+import torch.nn as nn
+
 from gap_quantization.utils import integerize, int_bits
-from gap_quantization.layers import *
+from gap_quantization.layers import Concat, EltWiseAdd
 
 
 def conv_quant(module, cfg):
@@ -11,11 +13,13 @@ def conv_quant(module, cfg):
     inp_frac_bits = cfg['bits'] - module.inp_int_bits[0] - cfg['signed']
 
     if out_int_bits + w_frac_bits + inp_frac_bits > cfg['accum_bits'] - cfg['signed']:
-        w_frac_bits -= out_int_bits + w_frac_bits + inp_frac_bits - cfg['accum_bits'] + cfg['signed']
+        w_frac_bits -= out_int_bits + w_frac_bits + \
+            inp_frac_bits - cfg['accum_bits'] + cfg['signed']
 
     params = {'norm': max(0, out_int_bits + w_frac_bits + inp_frac_bits - cfg['bits'] + cfg['signed']),
               'weight': integerize(module.weight.data, w_frac_bits, cfg['bits']).cpu().tolist(),
-              'bias': integerize(module.bias.data, cfg['bits'] - out_int_bits - cfg['signed'], cfg['bits']).cpu().tolist()}
+              'bias': integerize(module.bias.data, cfg['bits'] - out_int_bits - cfg['signed'],
+                                 cfg['bits']).cpu().tolist()}
     params['dot_place'] = w_frac_bits + inp_frac_bits - params['norm']
     return params
 
@@ -27,8 +31,7 @@ def concat_quant(module, cfg):
     return params
 
 
-layer_quantizers = {nn.Conv2d: conv_quant,
+LAYER_QUANTIZERS = {nn.Conv2d: conv_quant,
                     Concat: concat_quant,
                     EltWiseAdd: concat_quant
-                    # EltWiseMul: mult_quant
                     }
