@@ -89,7 +89,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
                    epoch, loss=loss, acc=acc))
 
 
-model = mobilenet_v2(pretrained=False, num_classes=2)
+model = mobilenet_v2(pretrained=True, num_classes=2)
 model = initialize_weights(model).cuda()
 ds = ImageFolder(root='/home/stasysp/Envs/Datasets/debug_classification/small',
                  transform=transforms.Compose([
