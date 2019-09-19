@@ -36,10 +36,13 @@ def stats_hook(module, inputs, output):
 
 
 class ModelQuantizer():
-    def __init__(self, model, cfg, transform=None, layer_quantizers=LAYER_QUANTIZERS, loader=default_loader):
+    def __init__(self, model, cfg, transform=None, layer_quantizers=None, loader=default_loader):
         self.model = model
         self.cfg = cfg
-        self.layer_quantizers = layer_quantizers
+        if layer_quantizers is not None:
+            self.layer_quantizers = layer_quantizers
+        else:
+            self.layer_quantizers = LAYER_QUANTIZERS
         self.transform = transform
         self.loader = loader
 
