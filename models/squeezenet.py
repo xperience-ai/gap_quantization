@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.init as init
-from .utils import load_state_dict_from_url
+from .utils import load_state_dict_from_url, load_weights
 from src.layers import Concat
 __all__ = ['SqueezeNet', 'squeezenet1_0', 'squeezenet1_1']
 
@@ -114,7 +114,8 @@ def _squeezenet(version, pretrained, progress, **kwargs):
         arch = 'squeezenet' + version
         state_dict = load_state_dict_from_url(model_urls[arch],
                                               progress=progress)
-        model.load_state_dict(state_dict)
+        # model.load_state_dict(state_dict)
+        model = load_weights(model, state_dict)
     return model
 
 
