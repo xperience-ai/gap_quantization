@@ -30,10 +30,6 @@ class Fire(nn.Module):
 
     def forward(self, x):
         x = self.squeeze_activation(self.squeeze(x))
-        # return torch.cat([
-        #     self.expand1x1_activation(self.expand1x1(x)),
-        #     self.expand3x3_activation(self.expand3x3(x))
-        # ], 1)
         return self.cat([
             self.expand1x1_activation(self.expand1x1(x)),
             self.expand3x3_activation(self.expand3x3(x))
@@ -114,7 +110,6 @@ def _squeezenet(version, pretrained, progress, **kwargs):
         arch = 'squeezenet' + version
         state_dict = load_state_dict_from_url(model_urls[arch],
                                               progress=progress)
-        # model.load_state_dict(state_dict)
         model = load_weights(model, state_dict)
     return model
 

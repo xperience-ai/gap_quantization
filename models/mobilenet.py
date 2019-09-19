@@ -67,7 +67,6 @@ class InvertedResidual(nn.Module):
 
     def forward(self, x):
         if self.use_res_connect:
-            # return x + self.conv(x)
             return self.add(x, self.conv(x))
         else:
             return self.conv(x)
@@ -144,7 +143,6 @@ class MobileNetV2(nn.Module):
 
     def forward(self, x):
         x = self.features(x)
-        # x = x.mean([2, 3])
         x = x.view(*x.shape[:2], -1)
         x = x.mean(2)
         x = self.classifier(x)
@@ -164,6 +162,5 @@ def mobilenet_v2(pretrained=False, progress=True, **kwargs):
     if pretrained:
         state_dict = load_state_dict_from_url(model_urls['mobilenet_v2'],
                                               progress=progress)
-        #model.load_state_dict(state_dict)
         model = load_weights(model, state_dict)
     return model
