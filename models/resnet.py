@@ -69,7 +69,6 @@ class BasicBlock(nn.Module):
         if self.downsample is not None:
             identity = self.downsample(x)
 
-        #out += identity
         out = self.add(out, identity)
         out = self.relu(out)
 
@@ -114,7 +113,6 @@ class Bottleneck(nn.Module):
         if self.downsample is not None:
             identity = self.downsample(x)
 
-        # out += identity
         out = self.add(out, identity)
         out = self.relu(out)
 
@@ -221,7 +219,6 @@ def _resnet(arch, block, layers, pretrained, progress, **kwargs):
     if pretrained:
         state_dict = load_state_dict_from_url(model_urls[arch],
                                               progress=progress)
-        # model.load_state_dict(state_dict)
         model = load_weights(model, state_dict)
     return model
 

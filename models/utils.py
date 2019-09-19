@@ -5,6 +5,7 @@ try:
     from torch.hub import load_state_dict_from_url
 except ImportError:
     from torch.utils.model_zoo import load_url as load_state_dict_from_url
+
 def get_model_name(checkpoint_keys, model_keys):
     mapping = {}
     checkpoint_keys = sorted(checkpoint_keys)
@@ -12,7 +13,6 @@ def get_model_name(checkpoint_keys, model_keys):
     j = 0
     for i in range(len(checkpoint_keys)):
         if re.sub(r'[0-9]+', '', checkpoint_keys[i]) == re.sub(r'[0-9]+', '', model_keys[j]):
-        #if checkpoint_keys[i] == model_keys[j]:
             mapping[model_keys[j]] = checkpoint_keys[i]
         else:
             i -= 1
