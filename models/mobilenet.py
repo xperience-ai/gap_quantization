@@ -5,6 +5,7 @@ import torch
 from torchvision.models.mobilenet import model_urls, _make_divisible, ConvBNReLU
 from torchvision import models
 
+
 __all__ = ['MobileNetV2', 'mobilenet_v2']
 
 
