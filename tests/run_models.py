@@ -76,7 +76,7 @@ def train(train_loader, model, criterion, optimizer, epoch):
 
         prec1 = accuracy(output.data, target)
 
-        loss.update(ep_loss.data[0], input.size(0))
+        loss.update(ep_loss.item(), input.size(0))
         acc.update(prec1[0], input.size(0))
 
         optimizer.zero_grad()
