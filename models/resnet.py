@@ -37,6 +37,7 @@ class BasicBlock(models.resnet.BasicBlock):
         return out
 
 
+class Bottleneck(models.resnet.Bottleneck):
     expansion = 4
 
     def __init__(self, inplanes, planes, stride=1, downsample=None, groups=1,
