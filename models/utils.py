@@ -19,16 +19,16 @@ def get_model_name(checkpoint_keys, model_keys):
         j += 1
     return  mapping
 
-def load_weights(model, checkpoint):
+def load_partial_weights(model, checkpoint):
     new_ckpt_state_dict = {}
-    mapping = get_model_name(checkpoint.keys(), model.state_dict().keys())
-    for key in mapping.keys():
-            if checkpoint[mapping[key]].shape == model.state_dict()[key].shape:
-                new_ckpt_state_dict[key] = copy.deepcopy(checkpoint[mapping[key]])
+    for key in checkpoint.keys():
+        if key in model.state_dict().keys():
+            if checkpoint[key].shape == model.state_dict()[key].shape:
+                new_ckpt_state_dict[key] = copy.deepcopy(checkpoint[key])
                 print("Successfully loaded all parameters for", key)
             else:
                 new_ckpt_state_dict[key] = copy.deepcopy(model.state_dict()[key])
-                in_shape = checkpoint[mapping[key]].shape
+                in_shape = checkpoint[key].shape
                 out_shape = model.state_dict()[key].shape
                 assert len(in_shape) == len(out_shape)
 
@@ -36,9 +36,9 @@ def load_weights(model, checkpoint):
                 try:
                     if len(min_shape) == 4:  # Conv2d
                         new_ckpt_state_dict[key][:min_shape[0], :min_shape[1], :, :] = \
-                            copy.deepcopy(checkpoint[mapping[key]])[:min_shape[0], :min_shape[1], :, :]
+                            copy.deepcopy(checkpoint[key])[:min_shape[0], :min_shape[1], :, :]
                     if len(min_shape) == 1:  # Other
-                        new_ckpt_state_dict[key][:min_shape[0]] = copy.deepcopy(checkpoint[mapping[key]])[:min_shape[0]]
+                        new_ckpt_state_dict[key][:min_shape[0]] = copy.deepcopy(checkpoint[key])[:min_shape[0]]
                     print("Successfully loaded part of the parameters for", key)
                 except:
                     print("Unsuccessful trial to partially load parameters for", key)
