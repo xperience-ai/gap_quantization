@@ -1,14 +1,10 @@
 from models.mobilenet import mobilenet_v2
-from models.squeezenet import squeezenet1_0, squeezenet1_1
-from models.resnet import resnet18, resnet34, resnet50, resnet101, resnet152, resnext50_32x4d, resnext101_32x8d
 from torchvision.datasets import ImageFolder
 from torch.utils.data import DataLoader
-from torchvision import datasets, transforms
+from torchvision import transforms
 import torch
 from torch import nn
-import torchvision.models as models
 
-import numpy as np
 import math
 
 class AverageMeter(object):
