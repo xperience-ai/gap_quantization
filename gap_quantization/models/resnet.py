@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 from .utils import load_state_dict_from_url, load_partial_weights
-from src.layers import Concat, EltWiseAdd
+from  gap_quantization.layers import Concat, EltWiseAdd
 from torchvision.models.resnet import conv3x3, conv1x1
 from torchvision import models
 from torchvision.models.resnet import ResNet, model_urls

@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.init as init
 from .utils import load_state_dict_from_url, load_partial_weights
-from src.layers import Concat
+from  gap_quantization.layers import Concat
 from torchvision.models.squeezenet import model_urls
 from torchvision import models
 __all__ = ['SqueezeNet', 'squeezenet1_0', 'squeezenet1_1']

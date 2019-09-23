@@ -1,6 +1,6 @@
 from torch import nn
 from .utils import load_state_dict_from_url, load_partial_weights
-from src.layers import Concat, EltWiseAdd
+from  gap_quantization.layers import Concat, EltWiseAdd
 import torch
 from torchvision.models.mobilenet import model_urls, _make_divisible, ConvBNReLU
 from torchvision import models
