@@ -1,2 +1,5 @@
-pytest
-pylint
+Pillow
+setuptools
+torch
+torchvision==0.2.1
+tqdm

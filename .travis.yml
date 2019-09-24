@@ -5,7 +5,8 @@ python:
 # command to install dependencies
 install:
   - pip install -r requirements.txt
+  - pip install pylint pytest
 # command to run tests
 script:
   - pytest
-  - pylint --rcfile=./.pylint.rc ./src/*.py
+  - pylint --rcfile=./.pylintrc ./*.py
