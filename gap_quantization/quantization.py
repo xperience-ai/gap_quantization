@@ -5,11 +5,11 @@ import os.path as osp
 
 import torch
 from torch.utils.data import DataLoader
-from tqdm import tqdm
 from torchvision.datasets.folder import default_loader
+from tqdm import tqdm
 
-from gap_quantization.utils import int_bits, Folder
 from gap_quantization.layer_quantizers import LAYER_QUANTIZERS
+from gap_quantization.utils import Folder, int_bits
 
 
 def stats_hook(module, inputs, output):
@@ -73,11 +73,13 @@ class ModelQuantizer():
         dataset = Folder(self.cfg['data_source'], self.loader, self.transform)
 
         if self.cfg['verbose']:
-            logging.info(
-                '{} images are used to collect statistics'.format(len(dataset)))
+            logging.info('{} images are used to collect statistics'.format(len(dataset)))
 
-        dataloader = DataLoader(dataset, batch_size=self.cfg['batch_size'], shuffle=False,
-                                num_workers=self.cfg['num_workers'], drop_last=False)
+        dataloader = DataLoader(dataset,
+                                batch_size=self.cfg['batch_size'],
+                                shuffle=False,
+                                num_workers=self.cfg['num_workers'],
+                                drop_last=False)
         self.model.eval()
 
         if self.cfg['use_gpu']:

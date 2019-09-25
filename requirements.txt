@@ -1,5 +1,5 @@
-torch
-torchvision==0.2.1
-tqdm
-setuptools
 Pillow
+setuptools
+torch
+torchvision>=0.4.0
+tqdm

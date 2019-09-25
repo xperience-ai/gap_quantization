@@ -38,13 +38,17 @@ def gap_round(inp, float_bits, bits=16):
     bound = math.pow(2.0, bits - 1)
     min_val = -bound
     max_val = bound - 1
-    return torch.clamp(torch.floor_(inp * math.pow(2., float_bits) + 0.5), min_val, max_val) * math.pow(2., -float_bits)
+    return torch.clamp(torch.floor_(inp * math.pow(2., float_bits) + 0.5), min_val, max_val) * math.pow(
+        2., -float_bits)
 
 
 class Folder(Dataset):
     def __init__(self, data_source, loader, transform):
-        self.images_list = [osp.join(data_source, image_name) for image_name in os.listdir(data_source)
-                            if osp.splitext(image_name)[1].lower() in IMG_EXTENSIONS]
+        self.images_list = [
+            osp.join(data_source, image_name)
+            for image_name in os.listdir(data_source)
+            if osp.splitext(image_name)[1].lower() in IMG_EXTENSIONS
+        ]
         self.transform = transform
         self.loader = loader
 
