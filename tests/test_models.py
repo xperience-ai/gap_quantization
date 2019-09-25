@@ -44,13 +44,8 @@ def _test_equal(name, input_shape):
 
 
 
-def test_models():
+@pytest.mark.parametrize("model_name", models_dict.keys())
+def test_model(model_name):
     input_shape = (1, 3, 224, 224)
-    for model_name in models_dict.keys():
-        _test_classification_model(model_name, input_shape)
-        _test_equal(model_name, input_shape)
-
-
-
-if __name__ == '__main__':
-    test_models()
+    _test_classification_model(model_name, input_shape)
+    _test_equal(model_name, input_shape)
