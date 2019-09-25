@@ -38,8 +38,6 @@ class BasicBlock(models.resnet.BasicBlock):
 
 
 class Bottleneck(models.resnet.Bottleneck):
-    expansion = 4
-
     def __init__(self, inplanes, planes, stride=1, downsample=None, groups=1,
                  base_width=64, dilation=1, norm_layer=None):
         super(Bottleneck, self).__init__(inplanes, planes, stride=stride, downsample=downsample, groups=groups,
