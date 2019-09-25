@@ -9,8 +9,6 @@ from torchvision import models
 __all__ = ['MobileNetV2', 'mobilenet_v2']
 
 
-
-
 class InvertedResidual(models.mobilenet.InvertedResidual):
     def __init__(self, inp, oup, stride, expand_ratio):
         super(InvertedResidual, self).__init__(inp, oup, stride, expand_ratio)
