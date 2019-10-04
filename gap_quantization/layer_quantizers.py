@@ -21,8 +21,8 @@ def conv_quant(module, cfg):
         'norm': [max(0, out_int_bits + w_frac_bits + inp_frac_bits - cfg['bits'] + cfg['signed'])],
         'weight': integerize(module.weight.data, w_frac_bits, cfg['bits']).cpu().tolist(),
         'bias': integerize(module.bias.data, bias_frac_bits, cfg['bits']).cpu().tolist(),
-        '_w_frac_bits': [w_frac_bits],
-        '_b_frac_bits': [bias_frac_bits]
+        'w_frac_bits': [w_frac_bits],
+        'b_frac_bits': [bias_frac_bits]
     }
     params['dot_place'] = [w_frac_bits + inp_frac_bits - params['norm'][0]]
     return params
