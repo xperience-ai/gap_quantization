@@ -4,28 +4,17 @@ import os
 import os.path as osp
 
 import torch
+import torch.nn as nn
 from torch.utils.data import DataLoader
 from torchvision.datasets.folder import default_loader
 from tqdm import tqdm
 
 from gap_quantization.layer_quantizers import LAYER_QUANTIZERS
-from gap_quantization.utils import Folder, int_bits
+from gap_quantization.utils import Folder, get_int_bits, int_bits, set_int_bits
 
 
 def stats_hook(module, inputs, output):
-    out_int_bits = int_bits(output)
-    if not hasattr(module, 'out_int_bits') or out_int_bits > module.out_int_bits:
-        module.out_int_bits = out_int_bits
-
-    if isinstance(inputs, torch.Tensor):
-        inp_int_bits = [int_bits(inputs)]
-    elif isinstance(inputs, tuple):
-        inp_int_bits = []
-        for inp in inputs:
-            inp_int_bits.append(int_bits(inp))
-    else:
-        raise TypeError("Unexpected type of input: {}, "
-                        "while tuple or torch.tensor required".format(inputs.__class__.__name__))
+    inp_int_bits = get_int_bits(inputs)
 
     if not hasattr(module, 'inp_int_bits'):
         module.inp_int_bits = inp_int_bits
@@ -33,6 +22,16 @@ def stats_hook(module, inputs, output):
         for idx, (curr_inp_int_bits, new_inp_int_bits) in enumerate(zip(module.inp_int_bits, inp_int_bits)):
             if new_inp_int_bits > curr_inp_int_bits:
                 module.inp_int_bits[idx] = new_inp_int_bits
+
+    if isinstance(module, nn.Conv2d):
+        out_int_bits = int_bits(output)
+    else:
+        out_int_bits = max(inp_int_bits)
+
+    if not hasattr(module, 'out_int_bits') or out_int_bits > module.out_int_bits:
+        module.out_int_bits = out_int_bits
+    # propagate info through the network
+    set_int_bits(output, out_int_bits)
 
 
 class ModelQuantizer():
@@ -93,6 +92,7 @@ class ModelQuantizer():
 
         with torch.no_grad():
             for imgs in tqdm(dataloader):
+                imgs.int_bits = int_bits(imgs)
                 if self.cfg['use_gpu']:
                     imgs = imgs.cuda()
                 _ = self.model(imgs)
