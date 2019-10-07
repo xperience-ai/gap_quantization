@@ -217,7 +217,8 @@ disable=parameter-unpacking,
         too-many-locals,
         W0221,
         W1202,
-        W0621
+        W0621,
+        W0611
 
 # Enable the message, report, category or checker with the given id(s). You can
 # either give multiple identifier separated by comma (,) or put this option

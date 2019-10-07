@@ -312,7 +312,7 @@ split_penalty_for_added_line_split=30
 #
 #   from a_very_long_or_indented_module_name_yada_yad import (
 #       long_argument_1, long_argument_2, long_argument_3)
-split_penalty_import_names=0
+split_penalty_import_names=1
 
 # The penalty of splitting the line around the 'and' and 'or'
 # operators.
