@@ -7,6 +7,30 @@ from torch.utils.data import Dataset
 from torchvision.datasets.folder import IMG_EXTENSIONS
 
 
+def get_int_bits(inputs):
+    if isinstance(inputs, torch.Tensor):
+        inp_int_bits = [inputs.int_bits]
+    elif isinstance(inputs, tuple):
+        inp_int_bits = []
+        for inp in inputs:
+            inp_int_bits.append(inp.int_bits)
+    else:
+        raise TypeError("Unexpected type of input: {}, "
+                        "while tuple or torch.tensor required".format(inputs.__class__.__name__))
+    return inp_int_bits
+
+
+def set_int_bits(output, out_int_bits):
+    if isinstance(output, torch.Tensor):
+        output.int_bits = out_int_bits
+    elif isinstance(output, tuple):
+        for idx, _ in enumerate(output):
+            output[idx].int_bits = out_int_bits
+    else:
+        raise TypeError("Unexpected type of output: {}, "
+                        "while tuple or torch.tensor required".format(output.__class__.__name__))
+
+
 def int_bits(inp, percent=0):
     if percent == 0:
         max_v = inp.abs().max().item()
