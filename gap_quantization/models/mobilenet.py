@@ -1,10 +1,9 @@
 from torch import nn
-from .utils import load_state_dict_from_url, load_partial_weights
-from  gap_quantization.layers import Concat, EltWiseAdd
-import torch
-from torchvision.models.mobilenet import model_urls, _make_divisible, ConvBNReLU
 from torchvision import models
+from torchvision.models.mobilenet import ConvBNReLU, _make_divisible, model_urls
 
+from gap_quantization.layers import EltWiseAdd
+from gap_quantization.models.utils import load_partial_weights, load_state_dict_from_url
 
 __all__ = ['MobileNetV2', 'mobilenet_v2']
 
@@ -17,8 +16,7 @@ class InvertedResidual(models.mobilenet.InvertedResidual):
     def forward(self, x):
         if self.use_res_connect:
             return self.add(x, self.conv(x))
-        else:
-            return self.conv(x)
+        return self.conv(x)
 
 
 class MobileNetV2(nn.Module):
@@ -51,7 +49,7 @@ class MobileNetV2(nn.Module):
             ]
 
         # only check the first element, assuming user knows t,c,n,s are required
-        if len(inverted_residual_setting) == 0 or len(inverted_residual_setting[0]) != 4:
+        if not inverted_residual_setting or len(inverted_residual_setting[0]) != 4:
             raise ValueError("inverted_residual_setting should be non-empty "
                              "or a 4-element list, got {}".format(inverted_residual_setting))
 
@@ -60,11 +58,11 @@ class MobileNetV2(nn.Module):
         self.last_channel = _make_divisible(last_channel * max(1.0, width_mult), round_nearest)
         features = [ConvBNReLU(3, input_channel, stride=2)]
         # building inverted residual blocks
-        for t, c, n, s in inverted_residual_setting:
-            output_channel = _make_divisible(c * width_mult, round_nearest)
-            for i in range(n):
-                stride = s if i == 0 else 1
-                features.append(block(input_channel, output_channel, stride, expand_ratio=t))
+        for expand_ratio, num_channels, num_layers, block_stride in inverted_residual_setting:
+            output_channel = _make_divisible(num_channels * width_mult, round_nearest)
+            for i in range(num_layers):
+                stride = block_stride if i == 0 else 1
+                features.append(block(input_channel, output_channel, stride, expand_ratio=expand_ratio))
                 input_channel = output_channel
         # building last several layers
         features.append(ConvBNReLU(input_channel, self.last_channel, kernel_size=1))
@@ -78,17 +76,17 @@ class MobileNetV2(nn.Module):
         )
 
         # weight initialization
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out')
-                if m.bias is not None:
-                    nn.init.zeros_(m.bias)
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.ones_(m.weight)
-                nn.init.zeros_(m.bias)
-            elif isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, 0, 0.01)
-                nn.init.zeros_(m.bias)
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d):
+                nn.init.kaiming_normal_(module.weight, mode='fan_out')
+                if module.bias is not None:
+                    nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.BatchNorm2d):
+                nn.init.ones_(module.weight)
+                nn.init.zeros_(module.bias)
+            elif isinstance(module, nn.Linear):
+                nn.init.normal_(module.weight, 0, 0.01)
+                nn.init.zeros_(module.bias)
 
     def forward(self, x):
         x = self.features(x)
@@ -109,7 +107,6 @@ def mobilenet_v2(pretrained=False, progress=True, **kwargs):
     """
     model = MobileNetV2(**kwargs)
     if pretrained:
-        state_dict = load_state_dict_from_url(model_urls['mobilenet_v2'],
-                                              progress=progress)
+        state_dict = load_state_dict_from_url(model_urls['mobilenet_v2'], progress=progress)
         model = load_partial_weights(model, state_dict)
     return model

@@ -1,6 +1,9 @@
+import math
+
+import numpy as np
+import pytest
 import torch
 import torch.nn as nn
-from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 
 from gap_quantization.quantization import ModelQuantizer
 
@@ -11,17 +14,17 @@ CFG = {
     "signed": True,  # use signed numbers
     "save_folder": "results",  # folder to save results
     "data_source": "tests/data",  # folder with images to collect dataset statistics
-    "use_gpu": True,  # use GPU for inference
+    "use_gpu": False,  # use GPU for inference
     "batch_size": 1,
     "num_workers": 0,  # number of workers for PyTorch dataloader
     "verbose": False,
     "save_params": False
 }
 
-# provide transforms that would be applied to images loaded with PIL
-TRANSFORMS = Compose(
-    [Resize((128, 128)),
-     ToTensor(), Normalize([0.485, 0.456, 0.406], [0.229, 0.224, 0.225])])
+
+class CustomToTensor:
+    def __call__(self, img):
+        return torch.FloatTensor(np.array(img).transpose(2, 0, 1))
 
 
 class MyModel(nn.Module):
@@ -35,8 +38,23 @@ class MyModel(nn.Module):
         return self.conv2d(inp)
 
 
-# model for quantization
-MODEL = MyModel(3, 64, 3)
+@pytest.fixture
+def transforms():
+    return CustomToTensor()
 
-QUANTIZER = ModelQuantizer(MODEL, CFG, TRANSFORMS)
-QUANTIZER.quantize_model()
+
+@pytest.fixture
+def model():
+    return MyModel(3, 64, 3)
+
+
+def test_conv_quant(model, transforms):
+    with torch.no_grad():
+        float_weight = model.conv2d.weight
+        float_bias = model.conv2d.bias
+        quantizer = ModelQuantizer(model, CFG, transforms)
+        quantizer.quantize_model()
+        rounded_weight = model.conv2d.weight * math.pow(2., -model.conv2d.w_frac_bits)
+        rounded_bias = model.conv2d.bias * math.pow(2., -model.conv2d.b_frac_bits)
+    assert np.allclose(float_weight.data.cpu().numpy(), rounded_weight.data.cpu().numpy(), atol=1e-2)
+    assert np.allclose(float_bias.data.cpu().numpy(), rounded_bias.data.cpu().numpy(), atol=1e-1)

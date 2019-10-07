@@ -52,7 +52,13 @@ class ModelQuantizer():
         for name, module in self.model.named_modules():
             params = self.quantize_layer(module)
             if params is not None:
-                self.save_quant_params(params, name)
+                for param_name in params:
+                    value_to_set = torch.Tensor(params[param_name])
+                    if self.cfg['use_gpu']:
+                        value_to_set = value_to_set.cuda()
+                    setattr(module, param_name, torch.nn.Parameter(value_to_set))
+                if self.cfg['save_params']:
+                    self.save_quant_params(params, name)
 
     def quantize_layer(self, module):
         if module.__class__ in self.layer_quantizers:
