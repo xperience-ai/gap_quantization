@@ -10,6 +10,7 @@ from torchvision.datasets.folder import default_loader
 from tqdm import tqdm
 
 from gap_quantization.layer_quantizers import LAYER_QUANTIZERS
+from gap_quantization.quantized_layers import QUANTIZED_LAYERS
 from gap_quantization.utils import Folder, get_int_bits, int_bits, set_int_bits
 
 
@@ -35,13 +36,23 @@ def stats_hook(module, inputs, output):
 
 
 class ModelQuantizer():
-    def __init__(self, model, cfg, transform=None, layer_quantizers=None, loader=default_loader):
+    def __init__(self,
+                 model,
+                 cfg,
+                 transform=None,
+                 layer_quantizers=None,
+                 quantized_layers=None,
+                 loader=default_loader):
         self.model = model
         self.cfg = cfg
         if layer_quantizers is not None:
             self.layer_quantizers = layer_quantizers
         else:
             self.layer_quantizers = LAYER_QUANTIZERS
+        if quantized_layers is not None:
+            self.quantized_layers = quantized_layers
+        else:
+            self.quantized_layers = QUANTIZED_LAYERS
         self.transform = transform
         self.loader = loader
 
@@ -49,17 +60,29 @@ class ModelQuantizer():
         self.collect_stats()
 
         for name, module in self.model.named_modules():
-            params = self.quantize_layer(module)
+            params = self.quantize_parameters(module)
+            if self.cfg['quantize_forward']:
+                self.model._modules[name] = self.quantize_forward(module)  # pylint: disable=protected-access
             if params is not None:
                 for param_name in params:
                     value_to_set = torch.Tensor(params[param_name])
                     if self.cfg['use_gpu']:
                         value_to_set = value_to_set.cuda()
-                    setattr(module, param_name, torch.nn.Parameter(value_to_set))
+                    setattr(self.model._modules[name], param_name, torch.nn.Parameter(value_to_set))  # pylint: disable=protected-access
                 if self.cfg['save_params']:
                     self.save_quant_params(params, name)
 
-    def quantize_layer(self, module):
+    def quantize_forward(self, module):
+        if module.__class__ in self.quantized_layers:
+            args_dict = {arg: module.__dict__[arg] for arg in module.__dict__ if arg[0] != '_'}
+            args_dict['bits'] = self.cfg['bits']
+            quantized_layer = self.quantized_layers[module.__class__](**args_dict)
+            for arg in args_dict:
+                setattr(quantized_layer, arg, args_dict[arg])
+            return quantized_layer
+        return module
+
+    def quantize_parameters(self, module):
         if module.__class__ in self.layer_quantizers:
             return self.layer_quantizers[module.__class__](module, self.cfg)
         return None
