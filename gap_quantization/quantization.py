@@ -9,9 +9,10 @@ from torch.utils.data import DataLoader
 from torchvision.datasets.folder import default_loader
 from tqdm import tqdm
 
+import gap_quantization.quantized_layers
 from gap_quantization.layer_quantizers import LAYER_QUANTIZERS
 from gap_quantization.quantized_layers import QUANTIZED_LAYERS
-from gap_quantization.utils import Folder, get_int_bits, int_bits, set_int_bits
+from gap_quantization.utils import Folder, get_int_bits, int_bits, module_classes, set_int_bits
 
 
 def stats_hook(module, inputs, output):
@@ -29,10 +30,14 @@ def stats_hook(module, inputs, output):
     else:
         out_int_bits = max(inp_int_bits)
 
-    if not hasattr(module, 'out_int_bits') or out_int_bits > module.out_int_bits:
-        module.out_int_bits = out_int_bits
-    # propagate info through the network
-    set_int_bits(output, out_int_bits)
+    if module.__class__ in module_classes(nn) \
+            and not isinstance(module, (nn.Sequential, nn.ModuleList)) \
+            or module.__class__ in module_classes(gap_quantization.layers):
+        # ignore custom modules: Fire, Bottleneck, ..., high-level PyTorch modules
+        if not hasattr(module, 'out_int_bits') or out_int_bits > module.out_int_bits:
+            module.out_int_bits = out_int_bits
+        # propagate info through the network
+        set_int_bits(output, out_int_bits)
 
 
 class ModelQuantizer():
@@ -58,19 +63,28 @@ class ModelQuantizer():
 
     def quantize_model(self):
         self.collect_stats()
+        self.quantize_module(self.model, 'net')
 
-        for name, module in self.model.named_modules():
-            params = self.quantize_parameters(module)
+    def quantize_module(self, module, module_name):
+        for name, submodule in module.named_children():
+            params = self.quantize_parameters(submodule)
             if self.cfg['quantize_forward']:
-                self.model._modules[name] = self.quantize_forward(module)  # pylint: disable=protected-access
+                submodule = self.quantize_forward(submodule)
             if params is not None:
                 for param_name in params:
                     value_to_set = torch.Tensor(params[param_name])
                     if self.cfg['use_gpu']:
                         value_to_set = value_to_set.cuda()
-                    setattr(self.model._modules[name], param_name, torch.nn.Parameter(value_to_set))  # pylint: disable=protected-access
+                    setattr(submodule, param_name, torch.nn.Parameter(value_to_set))
                 if self.cfg['save_params']:
                     self.save_quant_params(params, name)
+            try:
+                setattr(module, name, submodule)
+            except AttributeError:
+                if self.cfg['verbose']:
+                    print('Attribute {} wasn\'t set for {}'.format(name, module_name))
+        for child_name, child in module.named_children():
+            self.quantize_module(child, child_name)
 
     def quantize_forward(self, module):
         if module.__class__ in self.quantized_layers:
