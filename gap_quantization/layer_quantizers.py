@@ -22,17 +22,18 @@ def conv_quant(module, cfg):
         'weight': integerize(module.weight.data, w_frac_bits, cfg['bits']).cpu().tolist(),
         'bias': integerize(module.bias.data, bias_frac_bits, cfg['bits']).cpu().tolist(),
         'w_frac_bits': [w_frac_bits],
-        'b_frac_bits': [bias_frac_bits]
+        'b_frac_bits': [bias_frac_bits],
+        'inp_frac_bits': [inp_frac_bits]
     }
-    params['dot_place'] = [w_frac_bits + inp_frac_bits - params['norm'][0]]
+    params['out_frac_bits'] = [w_frac_bits + inp_frac_bits - params['norm'][0]]
     return params
 
 
 def concat_quant(module, cfg):
-    min_int_bits = min(module.int_inp_bits)
+    max_int_bits = max(module.inp_int_bits)
     params = {
-        'norm': [int_bits - min_int_bits for int_bits in module.int_inp_bits],
-        'dot_place': [cfg['bits'] - min_int_bits - cfg['signed']]
+        'norm': [max_int_bits - int_bits for int_bits in module.inp_int_bits],
+        'out_frac_bits': [cfg['bits'] - max_int_bits - cfg['signed']]
     }
     return params
 
