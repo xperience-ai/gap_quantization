@@ -33,6 +33,23 @@ class QuantizedAvgPool2d(nn.AvgPool2d):  # Avg Pooling was tested only like Glob
         return torch.clamp(roundnorm_reg(inputs * pool_factor, self.bits), min_val, max_val)
 
 
+class QuantizedAdaptiveAvgPool2d(
+        nn.AdaptiveAvgPool2d):  # Avg Pooling was tested only like Global Average Pooling
+    def __init__(self, output_size=1, bits=16, **kwargs):  # pylint: disable=unused-argument
+        super(QuantizedAdaptiveAvgPool2d, self).__init__(output_size)
+        self.bits = bits
+
+    def forward(self, inputs):
+        inputs = F.adaptive_avg_pool2d(inputs, self.output_size)
+        mult = inputs.shape[2] * inputs.shape[3] // self.output_size[0] // self.output_size[1]
+        inputs = torch.floor_(inputs * mult + 0.1)
+        pool_factor = math.pow(2, 16) // mult
+        bound = math.pow(2.0, self.bits - 1)
+        min_val = -bound
+        max_val = bound - 1
+        return torch.clamp(roundnorm_reg(inputs * pool_factor, self.bits), min_val, max_val)
+
+
 class QuantizedConv2d(nn.Conv2d):
     def __init__(self,
                  in_channels=1,
@@ -91,5 +108,6 @@ QUANTIZED_LAYERS = {
     nn.Conv2d: QuantizedConv2d,
     Concat: QuantizedConcat,
     EltWiseAdd: QuantizedEltWiseAdd,
-    nn.AvgPool2d: QuantizedConv2d
+    nn.AvgPool2d: QuantizedConv2d,
+    nn.AdaptiveAvgPool2d: QuantizedAdaptiveAvgPool2d
 }
