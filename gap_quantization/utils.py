@@ -1,3 +1,4 @@
+import inspect
 import math
 import os
 import os.path as osp
@@ -7,13 +8,17 @@ from torch.utils.data import Dataset
 from torchvision.datasets.folder import IMG_EXTENSIONS
 
 
+def module_classes(module):
+    return [cls for class_name, cls in inspect.getmembers(module, inspect.isclass)]
+
+
 def get_int_bits(inputs):
     if isinstance(inputs, torch.Tensor):
         inp_int_bits = [inputs.int_bits]
-    elif isinstance(inputs, tuple):
+    elif isinstance(inputs, (list, tuple)):
         inp_int_bits = []
         for inp in inputs:
-            inp_int_bits.append(inp.int_bits)
+            inp_int_bits.extend(get_int_bits(inp))
     else:
         raise TypeError("Unexpected type of input: {}, "
                         "while tuple or torch.tensor required".format(inputs.__class__.__name__))
