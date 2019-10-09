@@ -18,7 +18,8 @@ CFG = {
     "batch_size": 1,
     "num_workers": 0,  # number of workers for PyTorch dataloader
     "verbose": False,
-    "save_params": False
+    "save_params": True,
+    "quantize_forward": True
 }
 
 
