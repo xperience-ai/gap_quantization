@@ -108,5 +108,5 @@ def mobilenet_v2(pretrained=False, progress=True, **kwargs):
     model = MobileNetV2(**kwargs)
     if pretrained:
         state_dict = load_state_dict_from_url(model_urls['mobilenet_v2'], progress=progress)
-        model = load_partial_weights(model, state_dict)
+        model = load_partial_weights(model, state_dict, verbose=progress)
     return model

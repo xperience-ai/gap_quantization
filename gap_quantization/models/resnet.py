@@ -96,7 +96,7 @@ def _resnet(arch, block, layers, pretrained, progress, **kwargs):
     model = ResNet(block, layers, **kwargs)
     if pretrained:
         state_dict = load_state_dict_from_url(model_urls[arch], progress=progress)
-        model = load_partial_weights(model, state_dict)
+        model = load_partial_weights(model, state_dict, verbose=progress)
     return model
 
 

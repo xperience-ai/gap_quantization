@@ -18,7 +18,8 @@ CFG = {
     "batch_size": 1,
     "num_workers": 0,  # number of workers for PyTorch dataloader
     "verbose": False,
-    "save_params": False
+    "save_params": True,
+    "quantize_forward": True
 }
 
 
@@ -57,4 +58,4 @@ def test_conv_quant(model, transforms):
         rounded_weight = model.conv2d.weight * math.pow(2., -model.conv2d.w_frac_bits)
         rounded_bias = model.conv2d.bias * math.pow(2., -model.conv2d.b_frac_bits)
     assert np.allclose(float_weight.data.cpu().numpy(), rounded_weight.data.cpu().numpy(), atol=1e-2)
-    assert np.allclose(float_bias.data.cpu().numpy(), rounded_bias.data.cpu().numpy(), atol=1e-1)
+    assert np.allclose(float_bias.data.cpu().numpy(), rounded_bias.data.cpu().numpy(), atol=0.2)
