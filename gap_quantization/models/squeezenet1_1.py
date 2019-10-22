@@ -1,29 +1,27 @@
-from __future__ import absolute_import
-from __future__ import division
+from __future__ import absolute_import, division
 
 import collections
-from itertools import repeat
-from collections import OrderedDict
 import math
+from collections import OrderedDict
+from itertools import repeat
 
 import torch
 import torch.nn as nn
-from torch.utils import model_zoo
-from torch.nn import functional as F
 import torch.nn.init as init
-import torchvision
 import torch.utils.model_zoo as model_zoo
+import torchvision
+from torch.nn import functional as F
+from torch.utils import model_zoo as model_zoo
+from gap_quantization.layers import Concat
 
 #from torchreid.utils.quantization import round, roundnorm_reg, gap8_clip
 
 __all__ = ['squeezenet1_0', 'squeezenet1_1', 'squeezenet1_0_fc512']
 
-
 model_urls = {
     'squeezenet1_0': 'https://download.pytorch.org/models/squeezenet1_0-a815701f.pth',
     'squeezenet1_1': 'https://download.pytorch.org/models/squeezenet1_1-f364aa15.pth',
 }
-
 
 # class QuantizedConv2d(nn.Conv2d):
 #     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1,
@@ -66,9 +64,9 @@ model_urls = {
 
 def conv2d(input_channels, out_channels, quantized=False, bits=16, **kwargs):
     #if quantized:
-        #return QuantizedConv2d(input_channels, out_channels, bits=bits, **kwargs)
+    #return QuantizedConv2d(input_channels, out_channels, bits=bits, **kwargs)
     #else:
-        return nn.Conv2d(input_channels, out_channels, **kwargs)
+    return nn.Conv2d(input_channels, out_channels, **kwargs)
 
 
 def average_pooling(kernel_size, quantized=False, bits=16, **kwargs):
@@ -76,21 +74,24 @@ def average_pooling(kernel_size, quantized=False, bits=16, **kwargs):
     #     return GapAvgPool(kernel_size, out_bits=bits)
     # else:
     return nn.AvgPool2d(kernel_size)
-    
+
 
 class Fire(nn.Module):
-
-    def __init__(self, inplanes, squeeze_planes,
-                 expand1x1_planes, expand3x3_planes, pool=False, ceil_mode=True, **kwargs):
+    def __init__(self,
+                 inplanes,
+                 squeeze_planes,
+                 expand1x1_planes,
+                 expand3x3_planes,
+                 pool=False,
+                 ceil_mode=True,
+                 **kwargs):
         super(Fire, self).__init__()
         self.inplanes = inplanes
         self.squeeze = conv2d(inplanes, squeeze_planes, kernel_size=1, **kwargs)
         self.squeeze_activation = nn.ReLU(inplace=True)
-        self.expand1x1 = conv2d(squeeze_planes, expand1x1_planes,
-                                   kernel_size=1, **kwargs)
+        self.expand1x1 = conv2d(squeeze_planes, expand1x1_planes, kernel_size=1, **kwargs)
         self.expand1x1_activation = nn.ReLU(inplace=True)
-        self.expand3x3 = conv2d(squeeze_planes, expand3x3_planes,
-                                   kernel_size=3, padding=1, **kwargs)
+        self.expand3x3 = conv2d(squeeze_planes, expand3x3_planes, kernel_size=3, padding=1, **kwargs)
         self.expand3x3_activation = nn.ReLU(inplace=True)
         self.pool = pool
 
@@ -98,23 +99,25 @@ class Fire(nn.Module):
             self.maxpool1x1 = nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=ceil_mode)
             self.maxpool3x3 = nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=ceil_mode)
 
+        self.cat = Concat(1)
+
     def forward(self, x):
         x = self.squeeze_activation(self.squeeze(x))
         if self.pool == 'max':
-            return torch.cat([
+            return self.cat([
                 self.maxpool1x1(self.expand1x1_activation(self.expand1x1(x))),
                 self.maxpool3x3(self.expand3x3_activation(self.expand3x3(x)))
             ], 1)
         else:
-            return torch.cat([
-                self.expand1x1_activation(self.expand1x1(x)),
-                self.expand3x3_activation(self.expand3x3(x))
-            ], 1)
+            return self.cat(
+                [self.expand1x1_activation(self.expand1x1(x)),
+                 self.expand3x3_activation(self.expand3x3(x))], 1)
 
 
 class Identity(nn.Module):
     def forward(self, input):
         return input
+
 
 #
 # class GapAvgPool(nn.Module): # Avg Pooling was tested only like Global Average Pooling
@@ -144,8 +147,18 @@ class SqueezeNet(nn.Module):
     Iandola et al. SqueezeNet: AlexNet-level accuracy with 50x fewer parameters
     and< 0.5 MB model size. arXiv:1602.07360.
     """
-    def __init__(self, num_classes, loss, version=1.0, fc_dims=None, dropout_p=None, grayscale=False, ceil_mode=True,
-                 infer=False, normalize_embeddings=False, normalize_fc=False, **kwargs):
+    def __init__(self,
+                 num_classes,
+                 loss,
+                 version=1.0,
+                 fc_dims=None,
+                 dropout_p=None,
+                 grayscale=False,
+                 ceil_mode=True,
+                 infer=False,
+                 normalize_embeddings=False,
+                 normalize_fc=False,
+                 **kwargs):
         super(SqueezeNet, self).__init__()
         self.loss = loss
         self.feature_dim = 512
@@ -168,12 +181,13 @@ class SqueezeNet(nn.Module):
                 Fire(96, 16, 64, 64, **kwargs),
                 Fire(128, 16, 64, 64, **kwargs),
                 Fire(128, 32, 128, 128, pool=True, ceil_mode=ceil_mode, **kwargs),
-                Identity(), #nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=ceil_mode), # Pooling is inside of Fire module
-                Fire(256, 32, 128, 128, **kwargs),               # Identity blocks are needed for backward compatibility
-                Fire(256, 48, 192, 192, **kwargs),               # with previously trained models
+                Identity(
+                ),  #nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=ceil_mode), # Pooling is inside of Fire module
+                Fire(256, 32, 128, 128, **kwargs),  # Identity blocks are needed for backward compatibility
+                Fire(256, 48, 192, 192, **kwargs),  # with previously trained models
                 Fire(384, 48, 192, 192, **kwargs),
                 Fire(384, 64, 256, 256, pool=True, ceil_mode=ceil_mode, **kwargs),
-                Identity(), #nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=ceil_mode),
+                Identity(),  #nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=ceil_mode),
                 Fire(512, 64, 256, 256, **kwargs),
             )
         else:
@@ -183,10 +197,10 @@ class SqueezeNet(nn.Module):
                 nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=ceil_mode),
                 Fire(64, 16, 64, 64, **kwargs),
                 Fire(128, 16, 64, 64, pool='max', ceil_mode=ceil_mode, **kwargs),
-                Identity(), #nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=ceil_mode),
+                Identity(),  #nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=ceil_mode),
                 Fire(128, 32, 128, 128, **kwargs),
                 Fire(256, 32, 128, 128, pool='max', ceil_mode=ceil_mode, **kwargs),
-                Identity(), #nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=ceil_mode),
+                Identity(),  #nn.MaxPool2d(kernel_size=3, stride=2, ceil_mode=ceil_mode),
                 Fire(256, 48, 192, 192, **kwargs),
                 Fire(384, 48, 192, 192, **kwargs),
                 Fire(384, 64, 256, 256, **kwargs),
@@ -212,9 +226,10 @@ class SqueezeNet(nn.Module):
         if fc_dims is None:
             self.feature_dim = input_dim
             return None
-        
-        assert isinstance(fc_dims, (list, tuple)), "fc_dims must be either list or tuple, but got {}".format(type(fc_dims))
-        
+
+        assert isinstance(fc_dims, (list, tuple)), "fc_dims must be either list or tuple, but got {}".format(
+            type(fc_dims))
+
         layers = []
         for dim in fc_dims:
             layers.append(nn.Linear(input_dim, dim))
@@ -223,9 +238,9 @@ class SqueezeNet(nn.Module):
             if dropout_p is not None:
                 layers.append(nn.Dropout(p=dropout_p))
             input_dim = dim
-        
+
         self.feature_dim = fc_dims[-1]
-        
+
         return nn.Sequential(*layers)
 
     def _init_params(self):
@@ -281,46 +296,32 @@ def init_pretrained_weights(model, model_url):
     """
     pretrain_dict = model_zoo.load_url(model_url, map_location=None)
     model_dict = model.state_dict()
-    pretrain_dict = {k: v for k, v in pretrain_dict.items() if k in model_dict and model_dict[k].size() == v.size()}
+    pretrain_dict = {
+        k: v
+        for k, v in pretrain_dict.items()
+        if k in model_dict and model_dict[k].size() == v.size()
+    }
     model_dict.update(pretrain_dict)
     model.load_state_dict(model_dict)
     print("Initialized model with pretrained weights from {}".format(model_url))
 
 
 def squeezenet1_0(num_classes, loss, pretrained=True, **kwargs):
-    model = SqueezeNet(
-        num_classes, loss,
-        version=1.0,
-        fc_dims=None,
-        dropout_p=None,
-        **kwargs
-    )
+    model = SqueezeNet(num_classes, loss, version=1.0, fc_dims=None, dropout_p=None, **kwargs)
     if pretrained:
         init_pretrained_weights(model, model_urls['squeezenet1_0'])
     return model
 
 
 def squeezenet1_0_fc512(num_classes, loss, pretrained=True, **kwargs):
-    model = SqueezeNet(
-        num_classes, loss,
-        version=1.0,
-        fc_dims=[512],
-        dropout_p=None,
-        **kwargs
-    )
+    model = SqueezeNet(num_classes, loss, version=1.0, fc_dims=[512], dropout_p=None, **kwargs)
     if pretrained:
         init_pretrained_weights(model, model_urls['squeezenet1_0'])
     return model
 
 
 def squeezenet1_1(num_classes, loss, pretrained=True, **kwargs):
-    model = SqueezeNet(
-        num_classes, loss,
-        version=1.1,
-        fc_dims=None,
-        dropout_p=None,
-        **kwargs
-    )
+    model = SqueezeNet(num_classes, loss, version=1.1, fc_dims=None, dropout_p=None, **kwargs)
     if pretrained:
         init_pretrained_weights(model, model_urls['squeezenet1_1'])
     return model
