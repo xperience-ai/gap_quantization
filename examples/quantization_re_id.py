@@ -1,23 +1,22 @@
+import argparse
 import math
 
 import torch
-import argparse
 from PIL import Image
-from torchvision.transforms import Compose, Normalize, Resize, ToTensor, Grayscale
+from torchvision.transforms import Compose, Grayscale, Normalize, Resize, ToTensor
 
-#from gap_quantization.models.squeezenet import squeezenet1_1
 from gap_quantization.models.squeezenet1_1 import squeezenet1_1
 from gap_quantization.quantization import ModelQuantizer
 from gap_quantization.transforms import QuantizeInput
 
-parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
-parser.add_argument('--trained-model', type=str, default='test',
-                        help="path to trained model stored")
-args = parser.parse_args()
+
+def argument_parser():
+    parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
+    parser.add_argument('--trained-model', type=str, default='test', help="path to trained model stored")
+    return parser.parse_args()
+
 
 def main():
-    global args
-
     # provide quantization config
     cfg = {
         "bits": 16,  # number of bits to store weights and activations
@@ -25,7 +24,7 @@ def main():
         "signed": True,  # use signed numbers
         "save_folder": "results",  # folder to save results
         "data_source": "tests/data",  # folder with images to collect dataset statistics
-        "use_gpu": True,  # use GPU for inference
+        "use_gpu": False,  # use GPU for inference
         "batch_size": 1,
         "num_workers": 0,  # number of workers for PyTorch dataloader
         "verbose": False,
@@ -33,22 +32,19 @@ def main():
         "quantize_forward": True  # replace usual convs, poolings, ... with GAP-like ones
     }
 
-
     # provide transforms that would be applied to images loaded with PIL
-    transforms = Compose(
-        [Resize((128, 128)),
-         Grayscale(),
-         ToTensor(), Normalize([0.449], [0.225])])
+    transforms = Compose([Resize((128, 128)), Grayscale(), ToTensor(), Normalize([0.449], [0.225])])
 
     # model for quantization
-    #model = squeezenet1_1(pretrained=True, progress=False)
-    model = squeezenet1_1(num_classes=8631, loss={'xent', 'htri'},
-                              pretrained=False, grayscale=True,
-                              normalize_embeddings=False, normalize_fc=False)
-    save_path = args.trained_model
+    model = squeezenet1_1(num_classes=8631,
+                          loss={'xent', 'htri'},
+                          pretrained=False,
+                          grayscale=True,
+                          normalize_embeddings=False,
+                          normalize_fc=False)
+    save_path = argument_parser().trained_model
     pretrained_dict = torch.load(save_path)['state_dict']
     model.load_state_dict(pretrained_dict, strict=False)
-    #load_weights(model, , partial = False)
 
     quantizer = ModelQuantizer(model, cfg, transforms)
     quantizer.quantize_model()

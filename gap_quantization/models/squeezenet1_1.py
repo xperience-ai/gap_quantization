@@ -1,24 +1,16 @@
 from __future__ import absolute_import, division
 
-import collections
-import math
-from collections import OrderedDict
-from itertools import repeat
-
-import torch
+import pytest
+#pylint: disable=too-many-instance-attributes
 import torch.nn as nn
-import torch.nn.init as init
-import torch.utils.model_zoo as model_zoo
-import torchvision
 from torch.nn import functional as F
-from torch.utils import model_zoo as model_zoo
-from gap_quantization.layers import Concat
+from torch.utils import model_zoo
 
-#from torchreid.utils.quantization import round, roundnorm_reg, gap8_clip
+from gap_quantization.layers import Concat
 
 __all__ = ['squeezenet1_0', 'squeezenet1_1', 'squeezenet1_0_fc512']
 
-model_urls = {
+MODEL_URLS = {
     'squeezenet1_0': 'https://download.pytorch.org/models/squeezenet1_0-a815701f.pth',
     'squeezenet1_1': 'https://download.pytorch.org/models/squeezenet1_1-f364aa15.pth',
 }
@@ -62,14 +54,14 @@ model_urls = {
 #                         self.padding, self.dilation, self.groups)
 
 
-def conv2d(input_channels, out_channels, quantized=False, bits=16, **kwargs):
+def conv2d(input_channels, out_channels, **kwargs):
     #if quantized:
     #return QuantizedConv2d(input_channels, out_channels, bits=bits, **kwargs)
     #else:
     return nn.Conv2d(input_channels, out_channels, **kwargs)
 
 
-def average_pooling(kernel_size, quantized=False, bits=16, **kwargs):
+def average_pooling(kernel_size):
     # if quantized:
     #     return GapAvgPool(kernel_size, out_bits=bits)
     # else:
@@ -107,16 +99,15 @@ class Fire(nn.Module):
             return self.cat([
                 self.maxpool1x1(self.expand1x1_activation(self.expand1x1(x))),
                 self.maxpool3x3(self.expand3x3_activation(self.expand3x3(x)))
-            ], 1)
-        else:
-            return self.cat(
-                [self.expand1x1_activation(self.expand1x1(x)),
-                 self.expand3x3_activation(self.expand3x3(x))], 1)
+            ])
+        return self.cat(
+            [self.expand1x1_activation(self.expand1x1(x)),
+             self.expand3x3_activation(self.expand3x3(x))])
 
 
 class Identity(nn.Module):
-    def forward(self, input):
-        return input
+    def forward(self, input_data):
+        return input_data
 
 
 #
@@ -208,7 +199,7 @@ class SqueezeNet(nn.Module):
             )
 
         self.global_avgpool = average_pooling(7, **kwargs)
-        self.fc = self._construct_fc_layer(fc_dims, 512, dropout_p)
+        self.fully_connected = self._construct_fc_layer(fc_dims, 512, dropout_p)
         if not infer:
             self.classifier = nn.Linear(self.feature_dim, num_classes)
 
@@ -244,49 +235,48 @@ class SqueezeNet(nn.Module):
         return nn.Sequential(*layers)
 
     def _init_params(self):
-        for m in self.modules():
-            if isinstance(m, nn.Conv2d):
-                nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.BatchNorm2d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.BatchNorm1d):
-                nn.init.constant_(m.weight, 1)
-                nn.init.constant_(m.bias, 0)
-            elif isinstance(m, nn.Linear):
-                nn.init.normal_(m.weight, 0, 0.01)
-                if m.bias is not None:
-                    nn.init.constant_(m.bias, 0)
+        for module in self.modules():
+            if isinstance(module, nn.Conv2d):
+                nn.init.kaiming_normal_(module.weight, mode='fan_out', nonlinearity='relu')
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0)
+            elif isinstance(module, nn.BatchNorm2d):
+                nn.init.constant_(module.weight, 1)
+                nn.init.constant_(module.bias, 0)
+            elif isinstance(module, nn.BatchNorm1d):
+                nn.init.constant_(module.weight, 1)
+                nn.init.constant_(module.bias, 0)
+            elif isinstance(module, nn.Linear):
+                nn.init.normal_(module.weight, 0, 0.01)
+                if module.bias is not None:
+                    nn.init.constant_(module.bias, 0)
 
     def forward(self, x):
         if self.grayscale:
             x = self.conv1(x)
 
         f = self.features(x)
-        v = self.global_avgpool(f)
-        v = v.view(v.size(0), -1)
+        vector = self.global_avgpool(f)
+        vector = vector.view(vector.size(0), -1)
         if self.normalize_embeddings:
-            v = F.normalize(v)
+            vector = F.normalize(vector)
 
         if self.normalize_fc and hasattr(self, 'classifier'):
             self.classifier.weight.data = F.normalize(self.classifier.weight.data)
 
-        if self.fc is not None:
-            v = self.fc(v)
+        if self.fully_connected is not None:
+            vector = self.fully_connected(vector)
 
         if not self.training:
-            return v
+            return vector
 
-        y = self.classifier(v)
+        y = self.classifier(vector)
 
         if self.loss == {'xent'}:
             return y
-        elif self.loss == {'xent', 'htri'}:
-            return y, v
-        else:
-            raise KeyError("Unsupported loss: {}".format(self.loss))
+        if self.loss == {'xent', 'htri'}:
+            return y, vector
+        raise KeyError("Unsupported loss: {}".format(self.loss))
 
 
 def init_pretrained_weights(model, model_url):
@@ -309,19 +299,19 @@ def init_pretrained_weights(model, model_url):
 def squeezenet1_0(num_classes, loss, pretrained=True, **kwargs):
     model = SqueezeNet(num_classes, loss, version=1.0, fc_dims=None, dropout_p=None, **kwargs)
     if pretrained:
-        init_pretrained_weights(model, model_urls['squeezenet1_0'])
+        init_pretrained_weights(model, MODEL_URLS['squeezenet1_0'])
     return model
 
 
 def squeezenet1_0_fc512(num_classes, loss, pretrained=True, **kwargs):
     model = SqueezeNet(num_classes, loss, version=1.0, fc_dims=[512], dropout_p=None, **kwargs)
     if pretrained:
-        init_pretrained_weights(model, model_urls['squeezenet1_0'])
+        init_pretrained_weights(model, MODEL_URLS['squeezenet1_0'])
     return model
 
 
 def squeezenet1_1(num_classes, loss, pretrained=True, **kwargs):
     model = SqueezeNet(num_classes, loss, version=1.1, fc_dims=None, dropout_p=None, **kwargs)
     if pretrained:
-        init_pretrained_weights(model, model_urls['squeezenet1_1'])
+        init_pretrained_weights(model, MODEL_URLS['squeezenet1_1'])
     return model
