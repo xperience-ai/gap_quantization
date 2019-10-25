@@ -63,7 +63,7 @@ class ModelQuantizer():
 
     def quantize_model(self):
         self.collect_stats()
-        self.quantize_module(self.model, 'net')
+        self.quantize_module(self.model, 'model')
 
     def quantize_module(self, module, module_name):
         for name, submodule in module.named_children():
@@ -77,14 +77,14 @@ class ModelQuantizer():
                         value_to_set = value_to_set.cuda()
                     setattr(submodule, param_name, torch.nn.Parameter(value_to_set))
                 if self.cfg['save_params']:
-                    self.save_quant_params(params, name)
+                    self.save_quant_params(params, '.'.join([module_name, name]))
             try:
                 setattr(module, name, submodule)
             except AttributeError:
                 if self.cfg['verbose']:
                     print('Attribute {} wasn\'t set for {}'.format(name, module_name))
         for child_name, child in module.named_children():
-            self.quantize_module(child, child_name)
+            self.quantize_module(child, '.'.join([module_name, child_name]))
 
     def quantize_forward(self, module):
         if module.__class__ in self.quantized_layers:
