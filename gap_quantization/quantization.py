@@ -13,8 +13,7 @@ import gap_quantization.quantized_layers
 from gap_quantization.layer_quantizers import LAYER_QUANTIZERS
 from gap_quantization.layers import Concat
 from gap_quantization.quantized_layers import QUANTIZED_LAYERS
-from gap_quantization.utils import Folder, get_int_bits, int_bits, module_classes, roundnorm_reg, set_param
-
+from gap_quantization.utils import Folder, get_int_bits, int_bits, merge_batch_norms, module_classes, roundnorm_reg, set_param
 
 def stats_hook(module, inputs, output):
     inp_int_bits = get_int_bits(inputs)
@@ -98,6 +97,7 @@ class ModelQuantizer():
         self.params_dict = {}
 
     def quantize_model(self):
+        merge_batch_norms(self.model)
         self.collect_stats()
         self.quantize_parameters_rec(self.model, 'model')
         self.set_parameters_rec(self.model, 'model')
