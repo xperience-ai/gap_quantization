@@ -19,7 +19,8 @@ CFG = {
     "num_workers": 0,  # number of workers for PyTorch dataloader
     "verbose": False,
     "save_params": True,
-    "quantize_forward": True
+    "quantize_forward": True,
+    "num_input_channels": 3
 }
 
 
