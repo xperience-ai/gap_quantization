@@ -2,7 +2,9 @@ import json
 import logging
 import os
 import os.path as osp
+from functools import partial
 
+from PIL import Image
 import torch
 import torch.nn as nn
 from torch.utils.data import DataLoader
@@ -22,6 +24,24 @@ from gap_quantization.utils import (
     roundnorm_reg,
     set_param,
 )
+
+
+def save_act_hook(_, inp, output, save_dir, name):
+    if isinstance(inp, (tuple, list)) and len(inp) == 1:
+        inp = inp[0]
+    try:
+        inp = inp.data.cpu().numpy().tolist()
+    except AttributeError:
+        # if verbose:
+        #     print("module {} was ignored".format(name))
+        return
+    output = output.data.cpu().numpy().tolist()
+
+    os.makedirs(os.path.join(save_dir, name), exist_ok=True)
+    with open(os.path.join(save_dir, name, 'input.json'), 'w') as inp_f, \
+            open(os.path.join(save_dir, name, 'output.json'), 'w') as out_f:
+        json.dump(inp, inp_f)
+        json.dump(output, out_f)
 
 
 def stats_hook(module, inputs, output):
@@ -240,3 +260,25 @@ class ModelQuantizer():
 
         if self.cfg['use_gpu']:
             self.model.cpu()
+
+    def dump_activations(self, image_path, transforms):
+        handles = []
+        for name, module in self.model.named_modules():
+            if module.__class__ not in module_classes(gap_quantization.layers):
+                hook = partial(save_act_hook,
+                               save_dir=os.path.join(self.cfg['save_folder'], 'activation_dump'),
+                               name=name)
+                handles.append(module.register_forward_hook(hook))
+
+        self.model.eval()
+
+        img = Image.open(image_path).convert('RGB')
+        tensor = transforms(img)
+
+        if self.cfg['use_gpu']:
+            tensor = tensor.cuda()
+
+        _ = self.model(tensor.unsqueeze_(0)).data.cpu().tolist()
+
+        for handle in handles:  # delete forward hooks
+            handle.remove()
