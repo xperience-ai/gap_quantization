@@ -107,5 +107,6 @@ QUANTIZED_LAYERS = {
     Concat: QuantizedConcat,
     EltWiseAdd: QuantizedEltWiseAdd,
     nn.AvgPool2d: QuantizedAvgPool2d,
-    nn.AdaptiveAvgPool2d: QuantizedAdaptiveAvgPool2d
+    nn.AdaptiveAvgPool2d: QuantizedAdaptiveAvgPool2d,
+    nn.BatchNorm2d: nn.Identity
 }

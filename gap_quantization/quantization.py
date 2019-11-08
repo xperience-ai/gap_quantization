@@ -13,7 +13,16 @@ import gap_quantization.quantized_layers
 from gap_quantization.layer_quantizers import LAYER_QUANTIZERS
 from gap_quantization.layers import Concat
 from gap_quantization.quantized_layers import QUANTIZED_LAYERS
-from gap_quantization.utils import Folder, get_int_bits, int_bits, merge_batch_norms, module_classes, roundnorm_reg, set_param
+from gap_quantization.utils import (
+    Folder,
+    get_int_bits,
+    int_bits,
+    merge_batch_norms,
+    module_classes,
+    roundnorm_reg,
+    set_param,
+)
+
 
 def stats_hook(module, inputs, output):
     inp_int_bits = get_int_bits(inputs)
@@ -52,8 +61,12 @@ def shift_concat_input(module, grad_input, grad_output):
         module.bias = nn.Parameter(roundnorm_reg(module.bias, shift))
         grad_input = tuple(torch.zeros_like(tensor) for tensor in grad_input)
     elif grad_output[0].sum() != 0:
-        grad_input = tuple(
-            torch.empty_like(tensor).fill_(first_element(grad_output[0])) for tensor in grad_input)
+        tmp = []
+        for tensor in grad_input:
+            if tensor is not None:
+                tmp.append(torch.empty_like(tensor).fill_(first_element(grad_output[0])))
+            else:
+                tmp.append(None)
         print('propagated through {}'.format(module.__class__.__name__))
     elif isinstance(module, Concat):
         print(module.norm)
