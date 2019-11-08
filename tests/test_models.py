@@ -3,10 +3,15 @@ import torch
 from torchvision import models
 
 from gap_quantization.models.mobilenet import mobilenet_v2
-# yapf: disable
-from gap_quantization.models.resnet import (resnet18, resnet34, resnet50, resnet101, resnet152, resnext50_32x4d,
-                                            resnext101_32x8d)
-# yapf: enable
+from gap_quantization.models.resnet import (
+    resnet18,
+    resnet34,
+    resnet50,
+    resnet101,
+    resnet152,
+    resnext50_32x4d,
+    resnext101_32x8d,
+)
 from gap_quantization.models.squeezenet import squeezenet1_0, squeezenet1_1
 
 MODELS_DICT = {

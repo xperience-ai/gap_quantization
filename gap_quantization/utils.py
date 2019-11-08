@@ -4,6 +4,7 @@ import os
 import os.path as osp
 
 import torch
+import torch.nn as nn
 from torch.utils.data import Dataset
 from torchvision.datasets.folder import IMG_EXTENSIONS
 
@@ -89,3 +90,43 @@ class Folder(Dataset):
         if self.transform is not None:
             img = self.transform(img)
         return img
+
+
+def absorb_bn(module, bn_module):
+    w = module.weight.data
+    if module.bias is None:
+        zeros = torch.Tensor(module.out_channels).zero_().type(w.type())
+        module.bias = nn.Parameter(zeros)
+    bias = module.bias.data
+    invstd = bn_module.running_var.clone().add_(bn_module.eps).pow_(-0.5)
+    w.mul_(invstd.view(w.size(0), 1, 1, 1).expand_as(w))
+    bias.add_(-bn_module.running_mean).mul_(invstd)
+
+    if bn_module.affine:
+        w.mul_(bn_module.weight.data.view(w.size(0), 1, 1, 1).expand_as(w))
+        bias.mul_(bn_module.weight.data).add_(bn_module.bias.data)
+
+    bn_module.register_buffer('running_mean',
+                              torch.zeros(bn_module.running_mean.data.size(), dtype=torch.float32))
+    bn_module.register_buffer('running_var', torch.ones(bn_module.running_var.data.size(),
+                                                        dtype=torch.float32))
+    bn_module.register_parameter('weight', None)
+    bn_module.register_parameter('bias', None)
+    bn_module.affine = False
+
+
+def is_bn(module):
+    return isinstance(module, (nn.BatchNorm2d, nn.BatchNorm1d))
+
+
+def is_absorbing(module):
+    return isinstance(module, nn.Conv2d)
+
+
+def merge_batch_norms(model):
+    prev = None
+    for module in model.children():
+        if is_bn(module) and is_absorbing(prev):
+            absorb_bn(prev, module)
+        merge_batch_norms(module)
+        prev = module
