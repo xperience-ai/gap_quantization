@@ -11,8 +11,17 @@ from tqdm import tqdm
 
 import gap_quantization.quantized_layers
 from gap_quantization.layer_quantizers import LAYER_QUANTIZERS
+from gap_quantization.layers import Concat
 from gap_quantization.quantized_layers import QUANTIZED_LAYERS
-from gap_quantization.utils import Folder, get_int_bits, int_bits, merge_batch_norms, module_classes, set_int_bits
+from gap_quantization.utils import (
+    Folder,
+    get_int_bits,
+    int_bits,
+    merge_batch_norms,
+    module_classes,
+    roundnorm_reg,
+    set_param,
+)
 
 
 def stats_hook(module, inputs, output):
@@ -37,7 +46,47 @@ def stats_hook(module, inputs, output):
         if not hasattr(module, 'out_int_bits') or out_int_bits > module.out_int_bits:
             module.out_int_bits = out_int_bits
         # propagate info through the network
-        set_int_bits(output, out_int_bits)
+        set_param(output, 'int_bits', out_int_bits)
+
+
+def first_element(tensor):
+    return tensor.view(-1)[0].item()
+
+
+def shift_concat_input(module, grad_input, grad_output):
+    if isinstance(module, nn.Conv2d) and first_element(grad_output[0]):
+        shift = first_element(grad_output[0])
+        print(module, grad_output)
+        print('shifted module {} by {} bits'.format(module.__class__.__name__, shift))
+        module.norm += shift
+        module.bias = nn.Parameter(roundnorm_reg(module.bias, shift))
+        grad_input = tuple(torch.zeros_like(tensor) for tensor in grad_input)
+    elif grad_output[0].sum() != 0:
+        tmp = []
+        for tensor in grad_input:
+            if tensor is not None:
+                tmp.append(torch.empty_like(tensor).fill_(first_element(grad_output[0])))
+            else:
+                tmp.append(None)
+        grad_input = tuple(tmp)
+        print('propagated through {}'.format(module.__class__.__name__))
+    elif isinstance(module, Concat):
+        print(module.norm)
+        tmp = []
+        for curr_norm, tensor in zip(module.norm, grad_input):
+            tmp.append(torch.empty_like(tensor).fill_(curr_norm))
+        module.norm = nn.Parameter(torch.Tensor([0 for _ in module.norm]))
+        grad_input = tuple(tmp)
+    elif module.__class__ in module_classes(nn) \
+            and not isinstance(module, (nn.Sequential, nn.ModuleList)) \
+            or module.__class__ in module_classes(gap_quantization.layers):
+        tmp = []
+        for tensor in grad_input:
+            if tensor is not None:
+                tmp.append(torch.zeros_like(tensor))
+            else:
+                tmp.append(None)  # for convolutions without biases
+    return grad_input
 
 
 class ModelQuantizer():
@@ -60,32 +109,83 @@ class ModelQuantizer():
             self.quantized_layers = QUANTIZED_LAYERS
         self.transform = transform
         self.loader = loader
+        self.params_dict = {}
 
     def quantize_model(self):
         merge_batch_norms(self.model)
         self.collect_stats()
-        self.quantize_module(self.model, 'net')
+        self.quantize_parameters_rec(self.model, 'model')
+        self.set_parameters_rec(self.model, 'model')
+        self.fix_alignment()
 
-    def quantize_module(self, module, module_name):
+        if self.cfg['quantize_forward']:
+            self.quantize_forward_rec(self.model, 'model')
+            self.set_parameters_rec(self.model, 'model')
+
+        if self.cfg['save_params']:
+            for name in self.params_dict:
+                self.save_quant_params(self.params_dict[name], name)
+
+    def fix_alignment(self):
+        # fix cpu-gpu conversion
+        backward_hooks = []
+        for module in self.model.modules():
+            backward_hooks.append(module.register_backward_hook(shift_concat_input))
+
+        inp = torch.rand((1, self.cfg['num_input_channels'], 224, 224))
+        out = self.model(inp)
+        self.model.zero_grad()
+        out.backward(torch.zeros_like(out))
+
+        for handle in backward_hooks:  # delete forward hooks
+            handle.remove()
+
+    def quantize_parameters_rec(self, module, module_name):
         for name, submodule in module.named_children():
             params = self.quantize_parameters(submodule)
-            if self.cfg['quantize_forward']:
-                submodule = self.quantize_forward(submodule)
             if params is not None:
-                for param_name in params:
-                    value_to_set = torch.Tensor(params[param_name])
-                    if self.cfg['use_gpu']:
-                        value_to_set = value_to_set.cuda()
-                    setattr(submodule, param_name, torch.nn.Parameter(value_to_set))
-                if self.cfg['save_params']:
-                    self.save_quant_params(params, name)
+                full_module_name = '.'.join([module_name, name])
+                self.params_dict[full_module_name] = params
+
+                if self.cfg['verbose']:
+                    print(full_module_name)
+                    out = ''
+                    for k, val in params.items():
+                        if 'norm' in k or 'bits' in k and not isinstance(submodule, Concat):
+                            out += '{}: {}, '.format(k, val)
+                    out += '\n'
+                    print(out)
+        for child_name, child in module.named_children():
+            self.quantize_parameters_rec(child, '.'.join([module_name, child_name]))
+
+    def quantize_forward_rec(self, module, module_name):
+        for name, submodule in module.named_children():
+            submodule = self.quantize_forward(submodule)
+            # if '.'.join([module_name, name]) in self.params_dict:
+            #     for param_name in self.params_dict['.'.join([module_name, name])]:
+            #         value_to_set = torch.Tensor(self.params_dict['.'.join([module_name, name])][param_name])
+            #         setattr(submodule, param_name, torch.nn.Parameter(value_to_set))
             try:
                 setattr(module, name, submodule)
             except AttributeError:
                 if self.cfg['verbose']:
                     print('Attribute {} wasn\'t set for {}'.format(name, module_name))
         for child_name, child in module.named_children():
-            self.quantize_module(child, child_name)
+            self.quantize_forward_rec(child, '.'.join([module_name, child_name]))
+
+    def set_parameters_rec(self, module, module_name):
+        for name, submodule in module.named_children():
+            if '.'.join([module_name, name]) in self.params_dict:
+                for param_name in self.params_dict['.'.join([module_name, name])]:
+                    value_to_set = torch.Tensor(self.params_dict['.'.join([module_name, name])][param_name])
+                    setattr(submodule, param_name, torch.nn.Parameter(value_to_set))
+            try:
+                setattr(module, name, submodule)
+            except AttributeError:
+                if self.cfg['verbose']:
+                    print('Attribute {} wasn\'t set for {}'.format(name, module_name))
+        for child_name, child in module.named_children():
+            self.set_parameters_rec(child, '.'.join([module_name, child_name]))
 
     def quantize_forward(self, module):
         if module.__class__ in self.quantized_layers:
@@ -135,8 +235,8 @@ class ModelQuantizer():
                     imgs = imgs.cuda()
                 _ = self.model(imgs)
 
-        if self.cfg['use_gpu']:
-            self.model.cpu()
-
         for handle in handles:  # delete forward hooks
             handle.remove()
+
+        if self.cfg['use_gpu']:
+            self.model.cpu()

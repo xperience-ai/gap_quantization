@@ -26,15 +26,15 @@ def get_int_bits(inputs):
     return inp_int_bits
 
 
-def set_int_bits(output, out_int_bits):
-    if isinstance(output, torch.Tensor):
-        output.int_bits = out_int_bits
-    elif isinstance(output, tuple):
-        for idx, _ in enumerate(output):
-            output[idx].int_bits = out_int_bits
+def set_param(tensor, name, val):
+    if isinstance(tensor, torch.Tensor):
+        setattr(tensor, name, val)
+    elif isinstance(tensor, tuple):
+        for idx, _ in enumerate(tensor):
+            setattr(tensor[idx], name, val)
     else:
         raise TypeError("Unexpected type of output: {}, "
-                        "while tuple or torch.tensor required".format(output.__class__.__name__))
+                        "while tuple or torch.tensor required".format(tensor.__class__.__name__))
 
 
 def int_bits(inp, percent=0):

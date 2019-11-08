@@ -15,16 +15,14 @@ class QuantizedAvgPool2d(nn.AvgPool2d):  # Avg Pooling was tested only like Glob
                  padding=0,
                  ceil_mode=False,
                  count_include_pad=True,
-                 divisor_override=None,
                  bits=16,
                  **kwargs):  # pylint: disable=unused-argument
-        super(QuantizedAvgPool2d, self).__init__(kernel_size, stride, padding, ceil_mode, count_include_pad,
-                                                 divisor_override)
+        super(QuantizedAvgPool2d, self).__init__(kernel_size, stride, padding, ceil_mode, count_include_pad)
         self.bits = bits
 
     def forward(self, inputs):
         inputs = F.avg_pool2d(inputs, self.kernel_size, self.stride, self.padding, self.ceil_mode,
-                              self.count_include_pad, self.divisor_override)
+                              self.count_include_pad)
         inputs = torch.floor_(inputs * self.kernel_size * self.kernel_size + 0.1)
         pool_factor = math.pow(2, 16) // math.pow(self.kernel_size, 2)
         bound = math.pow(2.0, self.bits - 1)
@@ -108,6 +106,7 @@ QUANTIZED_LAYERS = {
     nn.Conv2d: QuantizedConv2d,
     Concat: QuantizedConcat,
     EltWiseAdd: QuantizedEltWiseAdd,
-    nn.AvgPool2d: QuantizedConv2d,
-    nn.AdaptiveAvgPool2d: QuantizedAdaptiveAvgPool2d
+    nn.AvgPool2d: QuantizedAvgPool2d,
+    nn.AdaptiveAvgPool2d: QuantizedAdaptiveAvgPool2d,
+    nn.BatchNorm2d: nn.Identity
 }
