@@ -17,12 +17,12 @@ CFG = {
     "signed": True,  # use signed numbers
     "save_folder": "results",  # folder to save results
     "data_source": "tests/data",  # folder with images to collect dataset statistics
-    "use_gpu": False,  # use GPU for inference
     "batch_size": 1,
     "num_workers": 0,  # number of workers for PyTorch dataloader
     "verbose": False,
     "save_params": False,
-    "quantize_forward": True
+    "quantize_forward": True,
+    "num_input_channels": 3
 }
 
 
@@ -31,7 +31,7 @@ def squeezenet():
     return squeezenet1_1(pretrained=True, progress=False)
 
 
-def test_fire_quant_infer(squeezenet):
+def test_squeezenet_infer(squeezenet):
     model = squeezenet
     model.eval()
     inp = Image.open('tests/data/lena.jpg')

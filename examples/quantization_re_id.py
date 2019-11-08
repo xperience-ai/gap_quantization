@@ -27,9 +27,10 @@ def main():
         "use_gpu": False,  # use GPU for inference
         "batch_size": 1,
         "num_workers": 0,  # number of workers for PyTorch dataloader
-        "verbose": False,
-        "save_params": True,  # save quantization parameters to the file
-        "quantize_forward": True  # replace usual convs, poolings, ... with GAP-like ones
+        "verbose": True,
+        "save_params": False,  # save quantization parameters to the file
+        "quantize_forward": True,  # replace usual convs, poolings, ... with GAP-like ones
+        "num_input_channels": 1
     }
 
     # provide transforms that would be applied to images loaded with PIL
@@ -41,10 +42,12 @@ def main():
                           pretrained=False,
                           grayscale=True,
                           normalize_embeddings=False,
-                          normalize_fc=False)
+                          normalize_fc=False,
+                          convbn=True)
+
     save_path = argument_parser().trained_model
     pretrained_dict = torch.load(save_path)['state_dict']
-    model.load_state_dict(pretrained_dict, strict=False)
+    model.load_state_dict(pretrained_dict)
 
     quantizer = ModelQuantizer(model, cfg, transforms)
     quantizer.quantize_model()
@@ -74,6 +77,7 @@ def main():
             out_frac_bits = layer.out_frac_bits
             break
     rounded_out = quant_out / math.pow(2., out_frac_bits)  # pylint: disable=unused-variable
+    print(rounded_out)
 
 
 if __name__ == '__main__':
