@@ -12,7 +12,7 @@ from tqdm import tqdm
 import gap_quantization.quantized_layers
 from gap_quantization.layer_quantizers import LAYER_QUANTIZERS
 from gap_quantization.quantized_layers import QUANTIZED_LAYERS
-from gap_quantization.utils import Folder, get_int_bits, int_bits, module_classes, set_int_bits
+from gap_quantization.utils import Folder, get_int_bits, int_bits, merge_batch_norms, module_classes, set_int_bits
 
 
 def stats_hook(module, inputs, output):
@@ -62,6 +62,7 @@ class ModelQuantizer():
         self.loader = loader
 
     def quantize_model(self):
+        merge_batch_norms(self.model)
         self.collect_stats()
         self.quantize_module(self.model, 'net')
 
