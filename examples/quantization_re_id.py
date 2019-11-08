@@ -34,7 +34,7 @@ def main():
     }
 
     # provide transforms that would be applied to images loaded with PIL
-    transforms = Compose([Resize((128, 128)), Grayscale(), ToTensor(), Normalize([0.449], [0.225])])
+    transforms = Compose([Resize((128, 128)), Grayscale(), ToTensor()])
 
     # model for quantization
     model = squeezenet1_1(num_classes=8631,
@@ -60,10 +60,12 @@ def main():
         Resize((128, 128)),
         Grayscale(),
         ToTensor(),
-        Normalize([0.449], [0.225]),
+        # Normalize([0.449], [0.225]),
         QuantizeInput(cfg['bits'],
                       next(model.modules()).inp_int_bits)
     ])
+
+    quantizer.dump_activations('tests/data/lena.jpg', quant_transforms)
 
     inp = Image.open('tests/data/lena.jpg')
 
