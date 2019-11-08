@@ -56,6 +56,7 @@ def first_element(tensor):
 def shift_concat_input(module, grad_input, grad_output):
     if isinstance(module, nn.Conv2d) and first_element(grad_output[0]):
         shift = first_element(grad_output[0])
+        print(module, grad_output)
         print('shifted module {} by {} bits'.format(module.__class__.__name__, shift))
         module.norm += shift
         module.bias = nn.Parameter(roundnorm_reg(module.bias, shift))
@@ -67,6 +68,7 @@ def shift_concat_input(module, grad_input, grad_output):
                 tmp.append(torch.empty_like(tensor).fill_(first_element(grad_output[0])))
             else:
                 tmp.append(None)
+        grad_input = tuple(tmp)
         print('propagated through {}'.format(module.__class__.__name__))
     elif isinstance(module, Concat):
         print(module.norm)
