@@ -73,10 +73,15 @@ def first_element(tensor):
     return tensor.view(-1)[0].item()
 
 
+def getattr_rec(obj, attr_list):
+    if attr_list:  # empty sequence is False in Python
+        return getattr_rec(getattr(obj, attr_list[0]), attr_list[1:])
+    return obj
+
+
 def shift_concat_input(module, grad_input, grad_output):
     if isinstance(module, nn.Conv2d) and first_element(grad_output[0]):
         shift = first_element(grad_output[0])
-        print(module, grad_output)
         print('shifted module {} by {} bits'.format(module.__class__.__name__, shift))
         module.norm += shift
         module.bias = nn.Parameter(roundnorm_reg(module.bias, shift))
@@ -159,6 +164,14 @@ class ModelQuantizer():
 
         for handle in backward_hooks:  # delete forward hooks
             handle.remove()
+        # update param_dict
+        for full_module_name in self.params_dict:
+            for param_name in self.params_dict[full_module_name]:
+                new_value = getattr_rec(self, full_module_name.split('.') + [param_name])
+                if not torch.equal(torch.Tensor(self.params_dict[full_module_name][param_name]), new_value):
+                    if self.cfg['verbose']:
+                        print('Parameter {} for module {} was fixed'.format(param_name, full_module_name))
+                    self.params_dict[full_module_name][param_name] = new_value.data.cpu().numpy().tolist()
 
     def quantize_parameters_rec(self, module, module_name):
         for name, submodule in module.named_children():
