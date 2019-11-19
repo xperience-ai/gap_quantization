@@ -54,14 +54,13 @@ MODEL_URLS = {
 #                         self.padding, self.dilation, self.groups)
 
 
-def conv2d(input_channels, out_channels, convbn=False, **kwargs):
+def conv2d(input_channels, out_channels, convbn, **kwargs):
     if convbn:
         return nn.Sequential(nn.Conv2d(input_channels, out_channels, **kwargs), nn.BatchNorm2d(out_channels))
-    else:
-        return nn.Conv2d(input_channels, out_channels, **kwargs)
+    return nn.Conv2d(input_channels, out_channels, **kwargs)
 
 
-def average_pooling(kernel_size, **kwargs):
+def average_pooling(kernel_size):
     # if quantized:
     #     return GapAvgPool(kernel_size, out_bits=bits)
     # else:

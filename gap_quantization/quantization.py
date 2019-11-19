@@ -139,13 +139,13 @@ class ModelQuantizer():
     def quantize_model(self):
         merge_batch_norms(self.model)
         self.collect_stats()
-        self.quantize_parameters_rec(self.model, 'model')
-        self.set_parameters_rec(self.model, 'model')
+        self.quantize_parameters_rec(self.model)
+        self.set_parameters_rec(self.model)
         self.fix_alignment()
 
         if self.cfg['quantize_forward']:
-            self.quantize_forward_rec(self.model, 'model')
-            self.set_parameters_rec(self.model, 'model')
+            self.quantize_forward_rec(self.model)
+            self.set_parameters_rec(self.model)
 
         if self.cfg['save_params']:
             for name in self.params_dict:
@@ -167,17 +167,20 @@ class ModelQuantizer():
         # update param_dict
         for full_module_name in self.params_dict:
             for param_name in self.params_dict[full_module_name]:
-                new_value = getattr_rec(self, full_module_name.split('.') + [param_name])
+                new_value = getattr_rec(self.model, full_module_name.split('.') + [param_name])
                 if not torch.equal(torch.Tensor(self.params_dict[full_module_name][param_name]), new_value):
                     if self.cfg['verbose']:
                         print('Parameter {} for module {} was fixed'.format(param_name, full_module_name))
                     self.params_dict[full_module_name][param_name] = new_value.data.cpu().numpy().tolist()
 
-    def quantize_parameters_rec(self, module, module_name):
+    def quantize_parameters_rec(self, module, module_name=None):
         for name, submodule in module.named_children():
             params = self.quantize_parameters(submodule)
-            if params is not None:
+            if module_name is not None:
                 full_module_name = '.'.join([module_name, name])
+            else:
+                full_module_name = name
+            if params is not None:
                 self.params_dict[full_module_name] = params
 
                 if self.cfg['verbose']:
@@ -188,11 +191,16 @@ class ModelQuantizer():
                             out += '{}: {}, '.format(k, val)
                     out += '\n'
                     print(out)
-        for child_name, child in module.named_children():
-            self.quantize_parameters_rec(child, '.'.join([module_name, child_name]))
+            self.quantize_parameters_rec(submodule, full_module_name)
+        #for child_name, child in module.named_children():
+        #self.quantize_parameters_rec(submodule, full_module_name)
 
-    def quantize_forward_rec(self, module, module_name):
+    def quantize_forward_rec(self, module, module_name=None):
         for name, submodule in module.named_children():
+            if module_name is not None:
+                full_module_name = '.'.join([module_name, name])
+            else:
+                full_module_name = name
             submodule = self.quantize_forward(submodule)
             # if '.'.join([module_name, name]) in self.params_dict:
             #     for param_name in self.params_dict['.'.join([module_name, name])]:
@@ -203,22 +211,30 @@ class ModelQuantizer():
             except AttributeError:
                 if self.cfg['verbose']:
                     print('Attribute {} wasn\'t set for {}'.format(name, module_name))
-        for child_name, child in module.named_children():
-            self.quantize_forward_rec(child, '.'.join([module_name, child_name]))
 
-    def set_parameters_rec(self, module, module_name):
+            self.quantize_forward_rec(submodule, full_module_name)
+        #for child_name, child in module.named_children():
+        #self.quantize_forward_rec(child, '.'.join([module_name, child_name]))
+
+    def set_parameters_rec(self, module, module_name=None):
         for name, submodule in module.named_children():
-            if '.'.join([module_name, name]) in self.params_dict:
-                for param_name in self.params_dict['.'.join([module_name, name])]:
-                    value_to_set = torch.Tensor(self.params_dict['.'.join([module_name, name])][param_name])
+            if module_name is not None:
+                full_module_name = '.'.join([module_name, name])
+            else:
+                full_module_name = name
+            if full_module_name in self.params_dict:
+                for param_name in self.params_dict[full_module_name]:
+                    value_to_set = torch.Tensor(self.params_dict[full_module_name][param_name])
                     setattr(submodule, param_name, torch.nn.Parameter(value_to_set))
             try:
                 setattr(module, name, submodule)
             except AttributeError:
                 if self.cfg['verbose']:
                     print('Attribute {} wasn\'t set for {}'.format(name, module_name))
-        for child_name, child in module.named_children():
-            self.set_parameters_rec(child, '.'.join([module_name, child_name]))
+
+            self.set_parameters_rec(submodule, full_module_name)
+        #for child_name, child in module.named_children():
+        #self.set_parameters_rec(submodule, full_module_name)
 
     def quantize_forward(self, module):
         if module.__class__ in self.quantized_layers:
