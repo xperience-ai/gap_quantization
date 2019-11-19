@@ -17,5 +17,5 @@ setuptools.setup(
     long_description_content_type="text/markdown",
     url="https://github.com/xperience-ai/gap_quantization",
     license="BSD",
-    packages=['gap_quantization'],
+    packages=setuptools.find_packages(),
     install_requires=INSTALL_REQS)

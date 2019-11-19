@@ -39,7 +39,10 @@ class QuantizedAdaptiveAvgPool2d(
 
     def forward(self, inputs):
         inputs = F.adaptive_avg_pool2d(inputs, self.output_size)
-        mult = inputs.shape[2] * inputs.shape[3] // self.output_size[0] // self.output_size[1]
+        if isinstance(self.output_size, tuple):
+            mult = inputs.shape[2] * inputs.shape[3] // self.output_size[0] // self.output_size[1]
+        else:
+            mult = inputs.shape[2] * inputs.shape[3] // self.output_size
         inputs = torch.floor_(inputs * mult + 0.1)
         pool_factor = math.pow(2, 16) // mult
         bound = math.pow(2.0, self.bits - 1)

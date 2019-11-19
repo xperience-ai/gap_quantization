@@ -19,3 +19,18 @@ class EltWiseMul(nn.Module):
 class EltWiseAdd(nn.Module):
     def forward(self, inp1, inp2):
         return inp1 + inp2
+
+
+class View(nn.Module):
+    def forward(self, inp, shapes):
+        return inp.view(*shapes)
+
+
+class Flatten(nn.Module):
+    def __init__(self, start_dim=0, end_dim=-1):
+        super(Flatten, self).__init__()
+        self.start_dim = start_dim
+        self.end_dim = end_dim
+
+    def forward(self, inputs):
+        return torch.flatten(inputs, self.start_dim, self.end_dim)
