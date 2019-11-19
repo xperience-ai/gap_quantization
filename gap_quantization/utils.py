@@ -2,9 +2,11 @@ import inspect
 import math
 import os
 import os.path as osp
+from urllib.parse import urlparse
 
 import torch
 import torch.nn as nn
+import torch.utils.model_zoo as model_zoo
 from torch.utils.data import Dataset
 from torchvision.datasets.folder import IMG_EXTENSIONS
 
@@ -130,3 +132,51 @@ def merge_batch_norms(model):
             absorb_bn(prev, module)
         merge_batch_norms(module)
         prev = module
+
+
+def load_weights(network, save_path, partial=True):
+    if urlparse(save_path).scheme != '':
+        pretrained_dict = model_zoo.load_url(save_path)
+    else:
+        pretrained_dict = torch.load(save_path)
+    if 'state_dict' in pretrained_dict:
+        pretrained_dict = pretrained_dict['state_dict']
+    try:
+        network.load_state_dict(pretrained_dict)
+        print('Pretrained network has absolutely the same layers!')
+    except:
+        model_dict = network.state_dict()
+        pretrained_dict = {key: val for key, val in pretrained_dict.items() if key in model_dict}
+        try:
+            network.load_state_dict(pretrained_dict)
+            print('Pretrained network has excessive layers; Only loading layers that are used')
+        except:
+            print('Pretrained network has fewer layers; The following are not initialized:')
+            not_initialized = set()
+            partially_initialized = set()
+            for key, val in pretrained_dict.items():
+                if val.size() == model_dict[key].size():
+                    model_dict[key] = val
+                elif partial:
+                    min_shape = [
+                        min(val.size()[i], model_dict[key].size()[i])
+                        for i in range(len(min(val.size(), model_dict[key].size())))
+                    ]
+                    if len(model_dict[key].size()) in [2, 4]:  # fc and conv layers
+                        model_dict[key][:min_shape[0], :min_shape[1], ...] = \
+                            val[:min_shape[0], :min_shape[1], ...]
+                    elif len(model_dict[key].size()) == 1:
+                        model_dict[key][:min_shape[0]] = val[:min_shape[0]]
+                    else:
+                        print('{} has size: {}'.format(key, 'x'.join(model_dict[key].size())))
+
+            for key, val in model_dict.items():
+                if key not in pretrained_dict or (not partial and val.size() != pretrained_dict[key].size()):
+                    not_initialized.add(key[:key.rfind('.')])
+                elif partial and val.size() != pretrained_dict[key].size():
+                    partially_initialized.add(key[:key.rfind('.')])
+            print(sorted(not_initialized))
+            if partial:
+                print('Partially initialized:')
+                print(sorted(partially_initialized))
+            network.load_state_dict(model_dict)

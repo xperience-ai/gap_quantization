@@ -1,5 +1,6 @@
 import json
 import logging
+import math
 import os
 import os.path as osp
 from functools import partial
@@ -26,7 +27,8 @@ from gap_quantization.utils import (
 )
 
 
-def save_act_hook(_, inp, output, save_dir, name):
+def save_act_hook(module, inp, output, save_dir, name, rounded):
+
     if isinstance(inp, (tuple, list)) and len(inp) == 1:
         inp = inp[0]
     try:
@@ -35,6 +37,12 @@ def save_act_hook(_, inp, output, save_dir, name):
         # if verbose:
         #     print("module {} was ignored".format(name))
         return
+
+    if rounded:
+        if hasattr(module, 'out_frac_bits'):
+            output /= math.pow(2, module.out_frac_bits)
+        else:
+            return
     output = output.data.cpu().numpy().tolist()
 
     os.makedirs(os.path.join(save_dir, name), exist_ok=True)
@@ -263,7 +271,10 @@ class ModelQuantizer():
 
         with torch.no_grad():
             for imgs in tqdm(dataloader):
-                imgs.int_bits = int_bits(imgs)
+                if self.cfg['raw_input']:
+                    imgs.int_bits = self.cfg['bits'] - self.cfg['signed']
+                else:
+                    imgs.int_bits = int_bits(imgs)
                 if self.cfg['use_gpu']:
                     imgs = imgs.cuda()
                 _ = self.model(imgs)
@@ -274,13 +285,13 @@ class ModelQuantizer():
         if self.cfg['use_gpu']:
             self.model.cpu()
 
-    def dump_activations(self, image_path, transforms):
+    def dump_activations(self, image_path, transforms, rounded=False, save_dir=None):
+        if save_dir is None:
+            save_dir = os.path.join(self.cfg['save_folder'], 'activation_dump')
         handles = []
         for name, module in self.model.named_modules():
             if module.__class__ not in module_classes(gap_quantization.layers):
-                hook = partial(save_act_hook,
-                               save_dir=os.path.join(self.cfg['save_folder'], 'activation_dump'),
-                               name=name)
+                hook = partial(save_act_hook, save_dir=save_dir, name=name, rounded=rounded)
                 handles.append(module.register_forward_hook(hook))
 
         self.model.eval()

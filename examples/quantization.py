@@ -22,7 +22,9 @@ def main():
         "num_workers": 0,  # number of workers for PyTorch dataloader
         "verbose": False,
         "save_params": True,  # save quantization parameters to the file
-        "quantize_forward": True  # replace usual convs, poolings, ... with GAP-like ones
+        "quantize_forward": True,  # replace usual convs, poolings, ... with GAP-like ones
+        "num_input_channels": 3,
+        "raw_input": False
     }
 
     # provide transforms that would be applied to images loaded with PIL
