@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 import math
@@ -17,6 +18,7 @@ from gap_quantization.layer_quantizers import LAYER_QUANTIZERS
 from gap_quantization.layers import Concat
 from gap_quantization.quantized_layers import QUANTIZED_LAYERS
 from gap_quantization.utils import (
+    AverageMeter,
     Folder,
     get_int_bits,
     int_bits,
@@ -25,6 +27,14 @@ from gap_quantization.utils import (
     roundnorm_reg,
     set_param,
 )
+
+
+def save_out_info(module, _, output, name, stats_collector, quantized):
+    if isinstance(module, nn.Conv2d):
+        mean = torch.mean(output, [0, 2, 3])
+        if quantized:
+            mean /= math.pow(2., module.out_frac_bits)
+        stats_collector[name].update(mean)
 
 
 def save_act_hook(module, inp, output, save_dir, name, rounded):
@@ -87,12 +97,14 @@ def getattr_rec(obj, attr_list):
     return obj
 
 
-def shift_concat_input(module, grad_input, grad_output):
+def shift_concat_input(module, grad_input, grad_output, module_name):
     if isinstance(module, nn.Conv2d) and first_element(grad_output[0]):
         shift = first_element(grad_output[0])
-        print('shifted module {} by {} bits'.format(module.__class__.__name__, shift))
+        print('shifted module {} by {} bits'.format(module_name, shift))
         module.norm += shift
         module.bias = nn.Parameter(roundnorm_reg(module.bias, shift))
+        module.b_frac_bits -= shift
+        module.out_frac_bits -= shift
         grad_input = tuple(torch.zeros_like(tensor) for tensor in grad_input)
     elif grad_output[0].sum() != 0:
         tmp = []
@@ -148,12 +160,16 @@ class ModelQuantizer():
         merge_batch_norms(self.model)
         self.collect_stats()
         self.quantize_parameters_rec(self.model, 'model')
+        float_model = copy.deepcopy(self.model)
         self.set_parameters_rec(self.model, 'model')
         self.fix_alignment()
 
         if self.cfg['quantize_forward']:
             self.quantize_forward_rec(self.model, 'model')
             self.set_parameters_rec(self.model, 'model')
+
+        if self.cfg['bias_correction']:
+            self.bias_correction(float_model)
 
         if self.cfg['save_params']:
             for name in self.params_dict:
@@ -162,8 +178,9 @@ class ModelQuantizer():
     def fix_alignment(self):
         # fix cpu-gpu conversion
         backward_hooks = []
-        for module in self.model.modules():
-            backward_hooks.append(module.register_backward_hook(shift_concat_input))
+        for name, module in self.model.named_modules():
+            hook = partial(shift_concat_input, module_name=name)
+            backward_hooks.append(module.register_backward_hook(hook))
 
         inp = torch.rand((1, self.cfg['num_input_channels'], 224, 224))
         out = self.model(inp)
@@ -281,6 +298,64 @@ class ModelQuantizer():
 
         for handle in handles:  # delete forward hooks
             handle.remove()
+
+        if self.cfg['use_gpu']:
+            self.model.cpu()
+
+    def bias_correction(self, float_model):
+        stats_f = {}
+        stats_q = {}
+
+        for name, module in float_model.named_modules():
+            stats_f[name] = AverageMeter('float')
+
+        for name, module in self.model.named_modules():
+            stats_q[name] = AverageMeter('quantized')
+
+        handles_q = []
+        for name, module in self.model.named_modules():
+            hook = partial(save_out_info, stats_collector=stats_q, name=name, quantized=True)
+            handles_q.append(module.register_forward_hook(hook))
+
+        handles_f = []
+        for name, module in float_model.named_modules():
+            hook = partial(save_out_info, stats_collector=stats_f, name=name, quantized=False)
+            handles_f.append(module.register_forward_hook(hook))
+
+        dataset = Folder(self.cfg['data_source'], self.loader, self.transform)
+
+        if self.cfg['verbose']:
+            logging.info('{} images are used to collect statistics'.format(len(dataset)))
+
+        dataloader = DataLoader(dataset,
+                                batch_size=self.cfg['batch_size'],
+                                shuffle=False,
+                                num_workers=self.cfg['num_workers'],
+                                drop_last=False)
+        self.model.eval()
+        float_model.eval()
+
+        if self.cfg['use_gpu']:
+            self.model.cuda()
+
+        with torch.no_grad():
+            for imgs in tqdm(dataloader):
+                if self.cfg['use_gpu']:
+                    imgs = imgs.cuda()
+                _ = self.model(imgs)  # other dataloader should be used for non-quantized images
+                _ = float_model(imgs)
+
+        for handle in handles_q:  # delete forward hooks
+            handle.remove()
+
+        for handle in handles_f:  # delete forward hooks
+            handle.remove()
+
+        with torch.no_grad():
+            for name, module in self.model.named_modules():
+                if isinstance(module, nn.Conv2d):
+                    module.bias += torch.round(
+                        (stats_f[name].avg - stats_q[name].avg) * math.pow(2., module.out_frac_bits))
 
         if self.cfg['use_gpu']:
             self.model.cpu()

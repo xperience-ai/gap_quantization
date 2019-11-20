@@ -9,7 +9,7 @@ from torchvision.transforms import Compose, Normalize, Resize, ToTensor
 from gap_quantization.models.mobilenet import mobilenet_v2
 from gap_quantization.models.squeezenet import squeezenet1_1
 from gap_quantization.quantization import ModelQuantizer
-from gap_quantization.transforms import QuantizeInput
+from gap_quantization.transforms import QuantizeInput, ToTensorNoNorm
 
 # provide quantization config
 CFG = {
@@ -24,7 +24,26 @@ CFG = {
     "verbose": False,
     "save_params": False,
     "quantize_forward": True,
-    "num_input_channels": 3
+    "num_input_channels": 3,
+    "raw_input": False,
+    "bias_correction": False
+}
+
+BIAS_CORR_CFG = {
+    "bits": 16,  # number of bits to store weights and activations
+    "accum_bits": 32,  # number of bits to store intermediate convolution result
+    "signed": True,  # use signed numbers
+    "save_folder": "results",  # folder to save results
+    "data_source": "tests/data",  # folder with images to collect dataset statistics
+    "use_gpu": False,  # use GPU for inference
+    "batch_size": 1,
+    "num_workers": 0,  # number of workers for PyTorch dataloader
+    "verbose": False,
+    "save_params": False,
+    "quantize_forward": True,
+    "num_input_channels": 3,
+    "raw_input": True,
+    "bias_correction": True  # bias correction works only with raw input = True currently
 }
 
 
@@ -57,6 +76,36 @@ def test_squeezenet_quant_infer(squeezenet):
 
     with torch.no_grad():
         quant_out = model(quant_transforms(inp).unsqueeze_(0))
+        for layer in reversed(list(model.modules())):
+            if hasattr(layer, 'out_frac_bits'):
+                out_frac_bits = layer.out_frac_bits
+                break
+        rounded_out = quant_out / math.pow(2., out_frac_bits)
+
+    np_float_out = float_out.data.cpu().numpy()
+    np_rounded_out = rounded_out.data.cpu().numpy()
+
+    assert np.allclose(quant_out % 1, 0)
+    assert np.allclose(np_float_out, np_rounded_out, atol=0.5, rtol=0.1)
+
+
+def test_squeezenet_bias_corr_quant_infer(squeezenet):
+    model = squeezenet
+    model.eval()
+    inp = Image.open('tests/data/lena.jpg')
+
+    transforms = Compose([
+        Resize((128, 128)),
+        ToTensorNoNorm(),
+    ])
+    with torch.no_grad():
+        float_out = model(transforms(inp).unsqueeze_(0))
+
+    quantizer = ModelQuantizer(model, BIAS_CORR_CFG, transforms)
+    quantizer.quantize_model()
+
+    with torch.no_grad():
+        quant_out = model(transforms(inp).unsqueeze_(0))
         for layer in reversed(list(model.modules())):
             if hasattr(layer, 'out_frac_bits'):
                 out_frac_bits = layer.out_frac_bits
