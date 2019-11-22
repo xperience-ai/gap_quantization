@@ -48,7 +48,7 @@ def main():
                           grayscale=True,
                           normalize_embeddings=False,
                           normalize_fc=False,
-                          convbn=True)
+                          convbn=False)
 
     save_path = argument_parser().trained_model
     pretrained_dict = torch.load(save_path)['state_dict']
@@ -93,7 +93,7 @@ def main():
     for i in range(0, 26):
         txt_list.write("#define NORM_" + str(i) + " " + str(list_norm[i]) + "\n")
 
-    remove_extra_dump(os.path.join(cfg['save_folder'], 'activations_dump'))
+    #remove_extra_dump(os.path.join(cfg['save_folder'], 'activations_dump'))
     remove_cat_files(cfg['save_folder'])
 
 
@@ -106,11 +106,11 @@ def read_norm(file):
 
 def make_list_from_dict(norm_dict):
     norm_list = []
-    norm_list.extend([norm_dict['conv1.0.json'], norm_dict['features.0.0.json']])
-    features_names_list = ['.squeeze.0.json', '.expand1x1.0.json', '.expand3x3.0.json']
+    norm_list.extend([norm_dict['conv1.json'], norm_dict['features.0.json']])
+    features_names_list = ['.squeeze.json', '.expand1x1.json', '.expand3x3.json']
     for i in [3, 4, 6, 7, 9, 10, 11, 12]:
         for feature_name in features_names_list:
-            norm_list.extend(['features.' + str(i) + feature_name])
+            norm_list.extend([norm_dict['features.' + str(i) + feature_name]])
     return norm_list
 
 
