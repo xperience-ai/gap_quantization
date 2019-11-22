@@ -16,7 +16,7 @@ MODEL_URLS = {
 }
 
 
-def conv2d(input_channels, out_channels, convbn=False, **kwargs):
+def conv2d(input_channels, out_channels, convbn, **kwargs):
     if convbn:
         return nn.Sequential(nn.Conv2d(input_channels, out_channels, **kwargs), nn.BatchNorm2d(out_channels))
     return nn.Conv2d(input_channels, out_channels, **kwargs)

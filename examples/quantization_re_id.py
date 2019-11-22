@@ -85,7 +85,7 @@ def main():
 
     dict_norm = {}
     for file in os.listdir(cfg['save_folder']):
-        if file != 'activation_dump' and not re.match('.*cat.json', file):
+        if file != 'activations_dump' and not re.match('.*cat.json', file):
             dict_norm[file] = round(read_norm(os.path.join(cfg['save_folder'], file)))
 
     list_norm = make_list_from_dict(dict_norm)
@@ -93,7 +93,8 @@ def main():
     for i in range(0, 26):
         txt_list.write("#define NORM_" + str(i) + " " + str(list_norm[i]) + "\n")
 
-    remove_extra_dump(os.path.join(cfg['save_folder'], 'activation_dump'))
+    remove_extra_dump(os.path.join(cfg['save_folder'], 'activations_dump'))
+    remove_cat_files(cfg['save_folder'])
 
 
 def read_norm(file):
@@ -109,21 +110,26 @@ def make_list_from_dict(norm_dict):
     features_names_list = ['.squeeze.0.json', '.expand1x1.0.json', '.expand3x3.0.json']
     for i in [3, 4, 6, 7, 9, 10, 11, 12]:
         for feature_name in features_names_list:
-            norm_list.extend([
-                norm_dict['features.' + str(i) + feature_name],
-            ])
+            norm_list.extend(['features.' + str(i) + feature_name])
     return norm_list
 
 
 def remove_extra_dump(directory):
     extra_list = ['conv1', 'conv1.1', 'features.0', 'features.0.1']
-    features_names_list = ['.squeeze', '.squeeze.1', '.expand1x1', '.expand1x1.1', '.expand3x3', '.expand3x3.1']
+    features_names_list = [
+        '.squeeze', '.squeeze.1', '.expand1x1', '.expand1x1.1', '.expand3x3', '.expand3x3.1'
+    ]
     for i in [3, 4, 6, 7, 9, 10, 11, 12]:
         for feature_name in features_names_list:
             extra_list.append('features.' + str(i) + feature_name)
     for folder in os.listdir(directory):
         if folder in extra_list:
             shutil.rmtree(os.path.join(directory, folder))
+
+
+def remove_cat_files(directory):
+    for i in [3, 4, 6, 7, 9, 10, 11, 12]:
+        os.remove(os.path.join(directory, 'features.' + str(i) + ".cat.json"))
 
 
 if __name__ == '__main__':

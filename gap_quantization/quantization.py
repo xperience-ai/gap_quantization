@@ -5,9 +5,9 @@ import os
 import os.path as osp
 from functools import partial
 
-from PIL import Image
 import torch
 import torch.nn as nn
+from PIL import Image
 from torch.utils.data import DataLoader
 from torchvision.datasets.folder import default_loader
 from tqdm import tqdm
@@ -234,6 +234,7 @@ class ModelQuantizer():
             except AttributeError:
                 if self.cfg['verbose']:
                     print('Attribute {} wasn\'t set for {}'.format(name, module_name))
+
             self.set_parameters_rec(submodule, full_module_name)
 
     def quantize_forward(self, module):
@@ -295,7 +296,7 @@ class ModelQuantizer():
 
     def dump_activations(self, image_path, transforms, rounded=False, save_dir=None):
         if save_dir is None:
-            save_dir = os.path.join(self.cfg['save_folder'], 'activation_dump')
+            save_dir = os.path.join(self.cfg['save_folder'], 'activations_dump')
         handles = []
         for name, module in self.model.named_modules():
             if module.__class__ not in module_classes(gap_quantization.layers):
