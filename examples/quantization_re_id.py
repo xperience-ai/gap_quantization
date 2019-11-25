@@ -1,5 +1,9 @@
 import argparse
+import json
 import math
+import os
+import re
+import shutil
 
 import torch
 from PIL import Image
@@ -7,7 +11,7 @@ from torchvision.transforms import Compose, Grayscale, Normalize, Resize, ToTens
 
 from gap_quantization.models.squeezenet1_1 import squeezenet1_1
 from gap_quantization.quantization import ModelQuantizer
-from gap_quantization.transforms import QuantizeInput
+from gap_quantization.transforms import QuantizeInput, ToTensorNoNorm
 
 
 def argument_parser():
@@ -28,13 +32,14 @@ def main():
         "batch_size": 1,
         "num_workers": 0,  # number of workers for PyTorch dataloader
         "verbose": True,
-        "save_params": False,  # save quantization parameters to the file
+        "save_params": True,  # save quantization parameters to the file
         "quantize_forward": True,  # replace usual convs, poolings, ... with GAP-like ones
-        "num_input_channels": 1
+        "num_input_channels": 1,
+        'raw_input': True
     }
 
     # provide transforms that would be applied to images loaded with PIL
-    transforms = Compose([Resize((128, 128)), Grayscale(), ToTensor()])
+    transforms = Compose([Resize((128, 128)), Grayscale(), ToTensorNoNorm()])
 
     # model for quantization
     model = squeezenet1_1(num_classes=8631,
@@ -43,7 +48,7 @@ def main():
                           grayscale=True,
                           normalize_embeddings=False,
                           normalize_fc=False,
-                          convbn=True)
+                          convbn=False)
 
     save_path = argument_parser().trained_model
     pretrained_dict = torch.load(save_path)['state_dict']
@@ -59,10 +64,7 @@ def main():
     quant_transforms = Compose([
         Resize((128, 128)),
         Grayscale(),
-        ToTensor(),
-        # Normalize([0.449], [0.225]),
-        QuantizeInput(cfg['bits'],
-                      next(model.modules()).inp_int_bits)
+        ToTensorNoNorm(),
     ])
 
     quantizer.dump_activations('tests/data/lena.jpg', quant_transforms)
@@ -80,6 +82,54 @@ def main():
             break
     rounded_out = quant_out / math.pow(2., out_frac_bits)  # pylint: disable=unused-variable
     print(rounded_out)
+
+    dict_norm = {}
+    for file in os.listdir(cfg['save_folder']):
+        if file != 'activations_dump' and not re.match('.*cat.json', file):
+            dict_norm[file] = round(read_norm(os.path.join(cfg['save_folder'], file)))
+
+    list_norm = make_list_from_dict(dict_norm)
+    txt_list = open('norm_list.h', 'w')
+    for i in range(0, 26):
+        txt_list.write("#define NORM_" + str(i) + " " + str(list_norm[i]) + "\n")
+
+    #remove_extra_dump(os.path.join(cfg['save_folder'], 'activations_dump'))
+    remove_cat_files(cfg['save_folder'])
+
+
+def read_norm(file):
+    with open(file, "rt") as js_file:
+        data = json.load(js_file)
+    norm = data['norm'][0]
+    return norm
+
+
+def make_list_from_dict(norm_dict):
+    norm_list = []
+    norm_list.extend([norm_dict['conv1.json'], norm_dict['features.0.json']])
+    features_names_list = ['.squeeze.json', '.expand1x1.json', '.expand3x3.json']
+    for i in [3, 4, 6, 7, 9, 10, 11, 12]:
+        for feature_name in features_names_list:
+            norm_list.extend([norm_dict['features.' + str(i) + feature_name]])
+    return norm_list
+
+
+def remove_extra_dump(directory):
+    extra_list = ['conv1', 'conv1.1', 'features.0', 'features.0.1']
+    features_names_list = [
+        '.squeeze', '.squeeze.1', '.expand1x1', '.expand1x1.1', '.expand3x3', '.expand3x3.1'
+    ]
+    for i in [3, 4, 6, 7, 9, 10, 11, 12]:
+        for feature_name in features_names_list:
+            extra_list.append('features.' + str(i) + feature_name)
+    for folder in os.listdir(directory):
+        if folder in extra_list:
+            shutil.rmtree(os.path.join(directory, folder))
+
+
+def remove_cat_files(directory):
+    for i in [3, 4, 6, 7, 9, 10, 11, 12]:
+        os.remove(os.path.join(directory, 'features.' + str(i) + ".cat.json"))
 
 
 if __name__ == '__main__':
