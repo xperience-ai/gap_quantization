@@ -89,7 +89,7 @@ def main():
             dict_norm[file] = round(read_norm(os.path.join(cfg['save_folder'], file)))
 
     list_norm = make_list_from_dict(dict_norm)
-    txt_list = open('norm_list.txt', 'w')
+    txt_list = open('norm_list.h', 'w')
     for i in range(0, 26):
         txt_list.write("#define NORM_" + str(i) + " " + str(list_norm[i]) + "\n")
 
