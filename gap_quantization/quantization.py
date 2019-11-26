@@ -6,9 +6,9 @@ import os
 import os.path as osp
 from functools import partial
 
-from PIL import Image
 import torch
 import torch.nn as nn
+from PIL import Image
 from torch.utils.data import DataLoader
 from torchvision.datasets.folder import default_loader
 from tqdm import tqdm
@@ -35,6 +35,18 @@ def save_out_info(module, _, output, name, stats_collector, quantized):
         if quantized:
             mean /= math.pow(2., module.out_frac_bits)
         stats_collector[name].update(mean)
+
+
+def save_inp_info(module, inp, out, name, stats_inp_collector, stats_out_collector):
+    if isinstance(module, nn.Conv2d):
+        stats_inp_collector[name].update(inp[0] / math.pow(2., module.inp_frac_bits))
+        stats_out_collector[name].update(out)
+
+
+def save_avg_inp_and_out(module, inp, out, name, stats_inp_collector, stats_out_collector):
+    if isinstance(module, nn.Conv2d):
+        stats_inp_collector[name].update(inp[0])
+        stats_out_collector[name].update(out)
 
 
 def save_act_hook(module, inp, output, save_dir, name, rounded):
@@ -305,21 +317,28 @@ class ModelQuantizer():
     def bias_correction(self, float_model):
         stats_f = {}
         stats_q = {}
+        stats_inp = {}
 
         for name, module in float_model.named_modules():
             stats_f[name] = AverageMeter('float')
 
         for name, module in self.model.named_modules():
             stats_q[name] = AverageMeter('quantized')
+            stats_inp[name] = AverageMeter('inp')
 
         handles_q = []
-        for name, module in self.model.named_modules():
-            hook = partial(save_out_info, stats_collector=stats_q, name=name, quantized=True)
-            handles_q.append(module.register_forward_hook(hook))
+        # for name, module in self.model.named_modules():
+        #     hook = partial(save_inp_info, stats_inp_collector=stats_inp,
+        #     stats_out_collector=stats_q, name=name, quantized=True)
+        #     handles_q.append(module.register_forward_hook(hook))
 
         handles_f = []
         for name, module in float_model.named_modules():
-            hook = partial(save_out_info, stats_collector=stats_f, name=name, quantized=False)
+            hook = partial(save_avg_inp_and_out,
+                           stats_inp_collector=stats_inp,
+                           stats_out_collector=stats_f,
+                           name=name,
+                           quantized=False)
             handles_f.append(module.register_forward_hook(hook))
 
         dataset = Folder(self.cfg['data_source'], self.loader, self.transform)
@@ -342,7 +361,7 @@ class ModelQuantizer():
             for imgs in tqdm(dataloader):
                 if self.cfg['use_gpu']:
                     imgs = imgs.cuda()
-                _ = self.model(imgs)  # other dataloader should be used for non-quantized images
+                # _ = self.model(imgs)  # other dataloader should be used for non-quantized images
                 _ = float_model(imgs)
 
         for handle in handles_q:  # delete forward hooks
@@ -354,8 +373,12 @@ class ModelQuantizer():
         with torch.no_grad():
             for name, module in self.model.named_modules():
                 if isinstance(module, nn.Conv2d):
+                    out_quasi_quant = module(
+                        torch.round(stats_inp[name].avg * math.pow(2., module.inp_frac_bits)))
+                    # print(stats_f[name].avg - out_quasi_quant)
                     module.bias += torch.round(
-                        (stats_f[name].avg - stats_q[name].avg) * math.pow(2., module.out_frac_bits))
+                        torch.mean(stats_f[name].avg * math.pow(2., module.out_frac_bits) - out_quasi_quant,
+                                   [0, 2, 3]))
 
         if self.cfg['use_gpu']:
             self.model.cpu()
