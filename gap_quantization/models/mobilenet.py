@@ -2,7 +2,7 @@ from torch import nn
 from torchvision import models
 from torchvision.models.mobilenet import ConvBNReLU, _make_divisible, model_urls
 
-from gap_quantization.layers import EltWiseAdd
+from gap_quantization.layers import EltWiseAdd, Flatten
 from gap_quantization.models.utils import load_partial_weights, load_state_dict_from_url
 
 __all__ = ['MobileNetV2', 'mobilenet_v2']
@@ -75,6 +75,9 @@ class MobileNetV2(nn.Module):
             nn.Linear(self.last_channel, num_classes),
         )
 
+        self.avg_pool = nn.AdaptiveAvgPool2d(1)
+        self.flatten = Flatten(1)
+
         # weight initialization
         for module in self.modules():
             if isinstance(module, nn.Conv2d):
@@ -90,8 +93,8 @@ class MobileNetV2(nn.Module):
 
     def forward(self, x):
         x = self.features(x)
-        x = x.view(*x.shape[:2], -1)
-        x = x.mean(2)
+        x = self.avg_pool(x)
+        x = self.flatten(x)
         x = self.classifier(x)
         return x
 
