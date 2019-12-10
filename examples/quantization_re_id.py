@@ -26,7 +26,7 @@ def main():
         "bits": 16,  # number of bits to store weights and activations
         "accum_bits": 32,  # number of bits to store intermediate convolution result
         "signed": True,  # use signed numbers
-        "save_folder": "results_BN",  # folder to save results
+        "save_folder": "results",  # folder to save results
         "data_source": "tests/data",  # folder with images to collect dataset statistics
         "use_gpu": False,  # use GPU for inference
         "batch_size": 1,
