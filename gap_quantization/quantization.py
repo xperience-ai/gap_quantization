@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 import gap_quantization.quantized_layers
 from gap_quantization.layer_quantizers import LAYER_QUANTIZERS
-from gap_quantization.layers import Concat
+from gap_quantization.layers import Concat, EltWiseAdd
 from gap_quantization.quantized_layers import QUANTIZED_LAYERS
 from gap_quantization.utils import (
     Folder,
@@ -43,7 +43,13 @@ def save_act_hook(module, inp, output, save_dir, name, rounded):
             output /= math.pow(2, module.out_frac_bits)
         else:
             return
-    output = output.data.cpu().numpy().tolist()
+    if isinstance(output, torch.Tensor):
+        output = output.data.cpu().numpy().tolist()
+    else:  # for module that has several outputs
+        _output = output
+        output = []
+        for out in output:
+            output.append(out.data.cpu().numpy().tolist())
 
     os.makedirs(os.path.join(save_dir, name), exist_ok=True)
     with open(os.path.join(save_dir, name, 'input.json'), 'w') as inp_f, \
@@ -88,13 +94,13 @@ def getattr_rec(obj, attr_list):
 
 
 def shift_concat_input(module, grad_input, grad_output):
-    if isinstance(module, nn.Conv2d) and first_element(grad_output[0]):
+    if isinstance(module, nn.Conv2d) and first_element(grad_output[0]):  # > 1e-1:
         shift = first_element(grad_output[0])
         print('shifted module {} by {} bits'.format(module.__class__.__name__, shift))
         module.norm += shift
         module.bias = nn.Parameter(roundnorm_reg(module.bias, shift))
         grad_input = tuple(torch.zeros_like(tensor) for tensor in grad_input)
-    elif grad_output[0].sum() != 0:
+    elif grad_output[0].sum() != 0:  #  > 1:
         tmp = []
         for tensor in grad_input:
             if tensor is not None:
@@ -103,7 +109,7 @@ def shift_concat_input(module, grad_input, grad_output):
                 tmp.append(None)
         grad_input = tuple(tmp)
         print('propagated through {}'.format(module.__class__.__name__))
-    elif isinstance(module, Concat):
+    elif isinstance(module, (Concat, EltWiseAdd)):
         print(module.norm)
         tmp = []
         for curr_norm, tensor in zip(module.norm, grad_input):
@@ -165,10 +171,14 @@ class ModelQuantizer():
         for module in self.model.modules():
             backward_hooks.append(module.register_backward_hook(shift_concat_input))
 
-        inp = torch.rand((1, self.cfg['num_input_channels'], 224, 224))
+        inp = torch.zeros((1, self.cfg['num_input_channels'], 224, 224))
         out = self.model(inp)
         self.model.zero_grad()
-        out.backward(torch.zeros_like(out))
+        if isinstance(out, tuple):  # if model has multiple outputs run backward pass for every output
+            for tmp in out:
+                tmp.backward(torch.zeros_like(tmp), retain_graph=True)
+        else:
+            out.backward(torch.zeros_like(out))
 
         for handle in backward_hooks:  # delete forward hooks
             handle.remove()
@@ -302,7 +312,7 @@ class ModelQuantizer():
         if self.cfg['use_gpu']:
             tensor = tensor.cuda()
 
-        _ = self.model(tensor.unsqueeze_(0)).data.cpu().tolist()
+        _ = self.model(tensor.unsqueeze_(0))
 
         for handle in handles:  # delete forward hooks
             handle.remove()
