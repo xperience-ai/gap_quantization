@@ -5,3 +5,4 @@ results
 *.pyc
 /dist/
 /*.egg-info
+*.zip
