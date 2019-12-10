@@ -20,7 +20,8 @@ CFG = {
     "verbose": False,
     "save_params": True,
     "quantize_forward": True,
-    "num_input_channels": 3
+    "num_input_channels": 3,
+    "raw_input": False
 }
 
 
