@@ -26,7 +26,7 @@ def main():
         "bits": 16,  # number of bits to store weights and activations
         "accum_bits": 32,  # number of bits to store intermediate convolution result
         "signed": True,  # use signed numbers
-        "save_folder": "results",  # folder to save results
+        "save_folder": "results_BN",  # folder to save results
         "data_source": "tests/data",  # folder with images to collect dataset statistics
         "use_gpu": False,  # use GPU for inference
         "batch_size": 1,
@@ -35,7 +35,8 @@ def main():
         "save_params": True,  # save quantization parameters to the file
         "quantize_forward": True,  # replace usual convs, poolings, ... with GAP-like ones
         "num_input_channels": 1,
-        'raw_input': True
+        "raw_input": True,
+        "convbn": True
     }
 
     # provide transforms that would be applied to images loaded with PIL
@@ -48,7 +49,7 @@ def main():
                           grayscale=True,
                           normalize_embeddings=False,
                           normalize_fc=False,
-                          convbn=False)
+                          convbn=True)
 
     save_path = argument_parser().trained_model
     pretrained_dict = torch.load(save_path)['state_dict']
@@ -88,12 +89,14 @@ def main():
         if file != 'activations_dump' and not re.match('.*cat.json', file):
             dict_norm[file] = round(read_norm(os.path.join(cfg['save_folder'], file)))
 
-    list_norm = make_list_from_dict(dict_norm)
+    list_norm = make_list_from_dict(dict_norm, cfg['convbn'])
     txt_list = open('norm_list.h', 'w')
     for i in range(0, 26):
         txt_list.write("#define NORM_" + str(i) + " " + str(list_norm[i]) + "\n")
 
-    #remove_extra_dump(os.path.join(cfg['save_folder'], 'activations_dump'))
+    if cfg['convbn']:
+        remove_extra_dump(os.path.join(cfg['save_folder'], 'activations_dump'))
+
     remove_cat_files(cfg['save_folder'])
 
 
@@ -104,10 +107,14 @@ def read_norm(file):
     return norm
 
 
-def make_list_from_dict(norm_dict):
+def make_list_from_dict(norm_dict, bn):
     norm_list = []
-    norm_list.extend([norm_dict['conv1.json'], norm_dict['features.0.json']])
-    features_names_list = ['.squeeze.json', '.expand1x1.json', '.expand3x3.json']
+    if bn:
+        norm_list.extend([norm_dict['conv1.0.json'], norm_dict['features.0.0.json']])
+        features_names_list = ['.squeeze.0.json', '.expand1x1.0.json', '.expand3x3.0.json']
+    else:
+        norm_list.extend([norm_dict['conv1.json'], norm_dict['features.0.json']])
+        features_names_list = ['.squeeze.json', '.expand1x1.json', '.expand3x3.json']
     for i in [3, 4, 6, 7, 9, 10, 11, 12]:
         for feature_name in features_names_list:
             norm_list.extend([norm_dict['features.' + str(i) + feature_name]])
