@@ -17,6 +17,10 @@ from gap_quantization.transforms import QuantizeInput, ToTensorNoNorm
 def argument_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--trained-model', type=str, default='test', help="path to trained model stored")
+    parser.add_argument('--convbn',
+                        type=str,
+                        default=True,
+                        help='Normalize features vector on the output of the network')
     return parser.parse_args()
 
 
@@ -36,11 +40,11 @@ def main():
         "quantize_forward": True,  # replace usual convs, poolings, ... with GAP-like ones
         "num_input_channels": 1,
         "raw_input": True,
-        "convbn": True
     }
 
     # provide transforms that would be applied to images loaded with PIL
     transforms = Compose([Resize((128, 128)), Grayscale(), ToTensorNoNorm()])
+    convbn = argument_parser().convbn
 
     # model for quantization
     model = squeezenet1_1(num_classes=8631,
@@ -49,7 +53,7 @@ def main():
                           grayscale=True,
                           normalize_embeddings=False,
                           normalize_fc=False,
-                          convbn=True)
+                          convbn=convbn)
 
     save_path = argument_parser().trained_model
     pretrained_dict = torch.load(save_path)['state_dict']
@@ -89,12 +93,12 @@ def main():
         if file != 'activations_dump' and not re.match('.*cat.json', file):
             dict_norm[file] = round(read_norm(os.path.join(cfg['save_folder'], file)))
 
-    list_norm = make_list_from_dict(dict_norm, cfg['convbn'])
+    list_norm = make_list_from_dict(dict_norm, convbn)
     txt_list = open('norm_list.h', 'w')
     for i in range(0, 26):
         txt_list.write("#define NORM_" + str(i) + " " + str(list_norm[i]) + "\n")
 
-    if cfg['convbn']:
+    if convbn:
         remove_extra_dump(os.path.join(cfg['save_folder'], 'activations_dump'))
 
     remove_cat_files(cfg['save_folder'])
