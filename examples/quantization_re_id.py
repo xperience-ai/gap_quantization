@@ -44,7 +44,8 @@ def main():
 
     # provide transforms that would be applied to images loaded with PIL
     transforms = Compose([Resize((128, 128)), Grayscale(), ToTensorNoNorm()])
-    convbn = argument_parser().convbn
+    args = argument_parser()
+    convbn = args.convbn
 
     # model for quantization
     model = squeezenet1_1(num_classes=8631,
@@ -55,7 +56,7 @@ def main():
                           normalize_fc=False,
                           convbn=convbn)
 
-    save_path = argument_parser().trained_model
+    save_path = args.trained_model
     pretrained_dict = torch.load(save_path)['state_dict']
     model.load_state_dict(pretrained_dict)
 
