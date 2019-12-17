@@ -24,17 +24,13 @@ CFG = {
     "verbose": False,
     "save_params": False,
     "quantize_forward": True,
-    "num_input_channels": 3
+    "num_input_channels": 3,
+    "raw_input": False
 }
 
 
-@pytest.fixture
-def squeezenet():
-    return squeezenet1_1(pretrained=True, progress=False)
-
-
-def test_squeezenet_quant_infer(squeezenet):
-    model = squeezenet
+def test_squeezenet_quant_infer():
+    model = squeezenet1_1(pretrained=True, progress=False)
     model.eval()
     inp = Image.open('tests/data/lena.jpg')
 
@@ -57,17 +53,14 @@ def test_squeezenet_quant_infer(squeezenet):
 
     with torch.no_grad():
         quant_out = model(quant_transforms(inp).unsqueeze_(0))
-        for layer in reversed(list(model.modules())):
-            if hasattr(layer, 'out_frac_bits'):
-                out_frac_bits = layer.out_frac_bits
-                break
-        rounded_out = quant_out / math.pow(2., out_frac_bits)
+
+        rounded_out = quant_out / math.pow(2., model.classifier[1].out_frac_bits)
 
     np_float_out = float_out.data.cpu().numpy()
     np_rounded_out = rounded_out.data.cpu().numpy()
 
     assert np.allclose(quant_out % 1, 0)
-    assert np.allclose(np_float_out, np_rounded_out, atol=0.5, rtol=0.1)
+    assert np.allclose(np_float_out, np_rounded_out, rtol=0.01, atol=0.1)
 
 
 def test_mobilenet_v2_quant_infer():
@@ -94,14 +87,11 @@ def test_mobilenet_v2_quant_infer():
 
     with torch.no_grad():
         quant_out = model(quant_transforms(inp).unsqueeze_(0))
-        for layer in reversed(list(model.modules())):
-            if hasattr(layer, 'out_frac_bits'):
-                out_frac_bits = layer.out_frac_bits
-                break
-        rounded_out = quant_out / math.pow(2., out_frac_bits)
+
+        rounded_out = quant_out / math.pow(2., model.classifier.out_frac_bits)
 
     np_float_out = float_out.data.cpu().numpy()
     np_rounded_out = rounded_out.data.cpu().numpy()
 
     assert np.allclose(quant_out % 1, 0)
-    assert np.allclose(np_float_out, np_rounded_out, atol=0.5, rtol=0.1)
+    assert np.allclose(np_float_out, np_rounded_out, rtol=0.01)

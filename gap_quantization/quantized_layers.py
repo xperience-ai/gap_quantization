@@ -84,6 +84,18 @@ class QuantizedConv2d(nn.Conv2d):
         return out
 
 
+class QuantizedLinear(nn.Linear):
+    def __init__(self, in_features=1, out_features=1, bias=True, bits=16, **kwargs):  # pylint: disable=unused-argument
+        super(QuantizedLinear, self).__init__(in_features, out_features, bias)
+        self.bits = bits
+
+    def forward(self, inputs):
+        fc_res = F.linear(inputs, self.weight)
+        if self.bias is not None:
+            fc_res += self.bias * math.pow(2., self.norm)
+        return gap8_clip(roundnorm_reg(fc_res, self.norm), self.bits)
+
+
 class QuantizedConcat(Concat):
     def __init__(self, dim=1, **kwargs):  # pylint: disable=unused-argument
         super(QuantizedConcat, self).__init__(dim)
@@ -111,5 +123,6 @@ QUANTIZED_LAYERS = {
     EltWiseAdd: QuantizedEltWiseAdd,
     nn.AvgPool2d: QuantizedAvgPool2d,
     nn.AdaptiveAvgPool2d: QuantizedAdaptiveAvgPool2d,
-    nn.BatchNorm2d: nn.Identity
+    nn.BatchNorm2d: nn.Identity,
+    nn.Linear: QuantizedLinear
 }
