@@ -17,6 +17,10 @@ from gap_quantization.transforms import QuantizeInput, ToTensorNoNorm
 def argument_parser():
     parser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     parser.add_argument('--trained-model', type=str, default='test', help="path to trained model stored")
+    parser.add_argument('--convbn',
+                        type=str,
+                        default=True,
+                        help='Normalize features vector on the output of the network')
     return parser.parse_args()
 
 
@@ -35,11 +39,13 @@ def main():
         "save_params": True,  # save quantization parameters to the file
         "quantize_forward": True,  # replace usual convs, poolings, ... with GAP-like ones
         "num_input_channels": 1,
-        'raw_input': True
+        "raw_input": True,
     }
 
     # provide transforms that would be applied to images loaded with PIL
     transforms = Compose([Resize((128, 128)), Grayscale(), ToTensorNoNorm()])
+    args = argument_parser()
+    convbn = args.convbn
 
     # model for quantization
     model = squeezenet1_1(num_classes=8631,
@@ -48,9 +54,9 @@ def main():
                           grayscale=True,
                           normalize_embeddings=False,
                           normalize_fc=False,
-                          convbn=False)
+                          convbn=convbn)
 
-    save_path = argument_parser().trained_model
+    save_path = args.trained_model
     pretrained_dict = torch.load(save_path)['state_dict']
     model.load_state_dict(pretrained_dict)
 
@@ -88,12 +94,14 @@ def main():
         if file != 'activations_dump' and not re.match('.*cat.json', file):
             dict_norm[file] = round(read_norm(os.path.join(cfg['save_folder'], file)))
 
-    list_norm = make_list_from_dict(dict_norm)
+    list_norm = make_list_from_dict(dict_norm, convbn)
     txt_list = open('norm_list.h', 'w')
     for i in range(0, 26):
         txt_list.write("#define NORM_" + str(i) + " " + str(list_norm[i]) + "\n")
 
-    #remove_extra_dump(os.path.join(cfg['save_folder'], 'activations_dump'))
+    if convbn:
+        remove_extra_dump(os.path.join(cfg['save_folder'], 'activations_dump'))
+
     remove_cat_files(cfg['save_folder'])
 
 
@@ -104,10 +112,14 @@ def read_norm(file):
     return norm
 
 
-def make_list_from_dict(norm_dict):
+def make_list_from_dict(norm_dict, bn):
     norm_list = []
-    norm_list.extend([norm_dict['conv1.json'], norm_dict['features.0.json']])
-    features_names_list = ['.squeeze.json', '.expand1x1.json', '.expand3x3.json']
+    if bn:
+        norm_list.extend([norm_dict['conv1.0.json'], norm_dict['features.0.0.json']])
+        features_names_list = ['.squeeze.0.json', '.expand1x1.0.json', '.expand3x3.0.json']
+    else:
+        norm_list.extend([norm_dict['conv1.json'], norm_dict['features.0.json']])
+        features_names_list = ['.squeeze.json', '.expand1x1.json', '.expand3x3.json']
     for i in [3, 4, 6, 7, 9, 10, 11, 12]:
         for feature_name in features_names_list:
             norm_list.extend([norm_dict['features.' + str(i) + feature_name]])
