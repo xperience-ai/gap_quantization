@@ -138,7 +138,7 @@ class ModelQuantizer():
             self.layer_quantizers = LAYER_QUANTIZERS
         if quantized_layers is not None:
             self.quantized_layers = quantized_layers
-        elif cfg['double_precision']:
+        elif self.cfg['double_precision']:
             self.quantized_layers = QUANTIZED_LAYERS_DP
         else:
             self.quantized_layers = QUANTIZED_LAYERS
