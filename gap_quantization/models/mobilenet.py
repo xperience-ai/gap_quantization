@@ -1,11 +1,31 @@
 from torch import nn
 from torchvision import models
-from torchvision.models.mobilenet import ConvBNReLU, _make_divisible, model_urls
+from torchvision.models.mobilenet import ConvBNReLU, model_urls
 
 from gap_quantization.layers import EltWiseAdd
 from gap_quantization.models.utils import load_partial_weights, load_state_dict_from_url
 
 __all__ = ['MobileNetV2', 'mobilenet_v2']
+
+
+def _make_divisible(value, divisor, min_value=None):
+    """
+    This function is taken from the original tf repo.
+    It ensures that all layers have a channel number that is divisible by 8
+    It can be seen here:
+    https://github.com/tensorflow/models/blob/master/research/slim/nets/mobilenet/mobilenet.py
+    :param value:
+    :param divisor:
+    :param min_value:
+    :return:
+    """
+    if min_value is None:
+        min_value = divisor
+    new_v = max(min_value, int(value + divisor / 2) // divisor * divisor)
+    # Make sure that round down does not go down by more than 10%.
+    if new_v < 0.9 * value:
+        new_v += divisor
+    return new_v
 
 
 class InvertedResidual(models.mobilenet.InvertedResidual):
