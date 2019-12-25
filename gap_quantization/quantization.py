@@ -15,7 +15,7 @@ from tqdm import tqdm
 import gap_quantization.quantized_layers
 from gap_quantization.layer_quantizers import LAYER_QUANTIZERS
 from gap_quantization.layers import Concat
-from gap_quantization.quantized_layers import QUANTIZED_LAYERS
+from gap_quantization.quantized_layers import QUANTIZED_LAYERS, QUANTIZED_LAYERS_DP
 from gap_quantization.utils import (
     Folder,
     get_int_bits,
@@ -138,6 +138,8 @@ class ModelQuantizer():
             self.layer_quantizers = LAYER_QUANTIZERS
         if quantized_layers is not None:
             self.quantized_layers = quantized_layers
+        elif self.cfg['double_precision']:
+            self.quantized_layers = QUANTIZED_LAYERS_DP
         else:
             self.quantized_layers = QUANTIZED_LAYERS
         self.transform = transform

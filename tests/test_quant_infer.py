@@ -24,7 +24,9 @@ CFG = {
     "verbose": False,
     "save_params": False,
     "quantize_forward": True,
-    "num_input_channels": 3
+    "num_input_channels": 3,
+    "raw_input": False,
+    "double_precision": False  # use double precision convolutions
 }
 
 

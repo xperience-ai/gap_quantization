@@ -84,6 +84,38 @@ class QuantizedConv2d(nn.Conv2d):
         return out
 
 
+class QuantizedConv2dDP(nn.Conv2d):
+    def __init__(self,
+                 in_channels=1,
+                 out_channels=1,
+                 kernel_size=3,
+                 stride=1,
+                 padding=0,
+                 dilation=1,
+                 groups=1,
+                 bias=True,
+                 bits=16,
+                 **kwargs):  # pylint: disable=unused-argument
+        super(QuantizedConv2dDP, self).__init__(in_channels, out_channels, kernel_size, stride, padding,
+                                                dilation, groups, bias)
+        self.bits = bits
+
+    def forward(self, inputs):
+        self.weights = nn.ParameterList(  # pylint: disable=attribute-defined-outside-init
+            [nn.Parameter(self.weight.data[:, i, :, :].unsqueeze_(1)) for i in range(self.weight.shape[1])])
+        out = None
+        for i in range(inputs.shape[1]):
+            conv_res = F.conv2d(inputs[:, i, :, :].unsqueeze_(1), self.weights[i], None, self.stride,
+                                self.padding, self.dilation, self.groups)
+            if out is None:
+                out = conv_res
+            else:
+                out += conv_res
+        out += (self.bias * math.pow(2, self.norm)).view(1, -1, 1, 1).expand_as(out)
+        out = gap8_clip(roundnorm_reg(out, self.norm), self.bits)
+        return out
+
+
 class QuantizedConcat(Concat):
     def __init__(self, dim=1, **kwargs):  # pylint: disable=unused-argument
         super(QuantizedConcat, self).__init__(dim)
@@ -107,6 +139,15 @@ class QuantizedEltWiseAdd(EltWiseAdd):
 
 QUANTIZED_LAYERS = {
     nn.Conv2d: QuantizedConv2d,
+    Concat: QuantizedConcat,
+    EltWiseAdd: QuantizedEltWiseAdd,
+    nn.AvgPool2d: QuantizedAvgPool2d,
+    nn.AdaptiveAvgPool2d: QuantizedAdaptiveAvgPool2d,
+    nn.BatchNorm2d: nn.Identity
+}
+
+QUANTIZED_LAYERS_DP = {
+    nn.Conv2d: QuantizedConv2dDP,
     Concat: QuantizedConcat,
     EltWiseAdd: QuantizedEltWiseAdd,
     nn.AvgPool2d: QuantizedAvgPool2d,

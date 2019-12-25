@@ -40,6 +40,7 @@ def main():
         "quantize_forward": True,  # replace usual convs, poolings, ... with GAP-like ones
         "num_input_channels": 1,
         "raw_input": True,
+        "double_precision": False  # use double precision convolutions
     }
 
     # provide transforms that would be applied to images loaded with PIL
