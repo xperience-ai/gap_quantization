@@ -43,13 +43,19 @@ def save_act_hook(module, inp, output, save_dir, name, rounded):
             output /= math.pow(2, module.out_frac_bits)
         else:
             return
-    output = output.data.cpu().numpy().tolist()
+
+    if isinstance(output, tuple):
+        out_to_save = []
+        for out_tensor in output:
+            out_to_save.append(out_tensor.cpu().data.numpy().tolist())
+    else:
+        out_to_save = output.cpu().data.numpy().tolist()
 
     os.makedirs(os.path.join(save_dir, name), exist_ok=True)
     with open(os.path.join(save_dir, name, 'input.json'), 'w') as inp_f, \
             open(os.path.join(save_dir, name, 'output.json'), 'w') as out_f:
         json.dump(inp, inp_f)
-        json.dump(output, out_f)
+        json.dump(out_to_save, out_f)
 
 
 def stats_hook(module, inputs, output):
@@ -170,7 +176,11 @@ class ModelQuantizer():
         inp = torch.rand((1, self.cfg['num_input_channels'], 224, 224))
         out = self.model(inp)
         self.model.zero_grad()
-        out.backward(torch.zeros_like(out))
+        if isinstance(out, tuple):
+            for out_tensor in out:
+                out_tensor.backward(torch.zeros_like(out_tensor), retain_graph=True)
+        else:
+            out.backward(torch.zeros_like(out))
 
         for handle in backward_hooks:  # delete forward hooks
             handle.remove()
@@ -313,7 +323,7 @@ class ModelQuantizer():
         if self.cfg['use_gpu']:
             tensor = tensor.cuda()
 
-        _ = self.model(tensor.unsqueeze_(0)).data.cpu().tolist()
+        _ = self.model(tensor.unsqueeze_(0))
 
         for handle in handles:  # delete forward hooks
             handle.remove()
