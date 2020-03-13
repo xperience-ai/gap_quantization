@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 import gap_quantization.quantized_layers
 from gap_quantization.layer_quantizers import LAYER_QUANTIZERS
-from gap_quantization.layers import Concat
+from gap_quantization.layers import Concat, EltWiseAdd
 from gap_quantization.quantized_layers import QUANTIZED_LAYERS, QUANTIZED_LAYERS_DP
 from gap_quantization.utils import (
     Folder,
@@ -109,7 +109,7 @@ def shift_concat_input(module, grad_input, grad_output):
                 tmp.append(None)
         grad_input = tuple(tmp)
         print('propagated through {}'.format(module.__class__.__name__))
-    elif isinstance(module, Concat):
+    elif isinstance(module, (Concat, EltWiseAdd)):
         print(module.norm)
         tmp = []
         for curr_norm, tensor in zip(module.norm, grad_input):

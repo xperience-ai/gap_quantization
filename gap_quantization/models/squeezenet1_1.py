@@ -1,6 +1,5 @@
 from __future__ import absolute_import, division
 
-import pytest
 #pylint: disable=too-many-instance-attributes
 import torch.nn as nn
 from torch.nn import functional as F

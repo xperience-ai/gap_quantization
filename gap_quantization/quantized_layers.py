@@ -137,13 +137,26 @@ class QuantizedEltWiseAdd(EltWiseAdd):
         return torch.stack(inputs, dim=0).sum(dim=0)
 
 
+class QuantizedLinear(nn.Linear):
+    def __init__(self, in_features, out_features, bias=True, **kwargs):  # pylint: disable=unused-argument
+        super(QuantizedLinear, self).__init__(in_features, out_features, bias)
+
+    def forward(self, inp1):
+        out = F.linear(inp1, self.weight)
+        out = gap8_clip(roundnorm_reg(out, self.norm), self.bits)
+        out += self.bias.view(1, -1).expand_as(out)
+        out = torch.clamp(out, -math.pow(2., self.bits - 1), math.pow(2., self.bits) - 1)
+        return out
+
+
 QUANTIZED_LAYERS = {
     nn.Conv2d: QuantizedConv2d,
     Concat: QuantizedConcat,
     EltWiseAdd: QuantizedEltWiseAdd,
     nn.AvgPool2d: QuantizedAvgPool2d,
     nn.AdaptiveAvgPool2d: QuantizedAdaptiveAvgPool2d,
-    nn.BatchNorm2d: nn.Identity
+    nn.BatchNorm2d: nn.Identity,
+    nn.Linear: QuantizedLinear
 }
 
 QUANTIZED_LAYERS_DP = {
@@ -152,5 +165,6 @@ QUANTIZED_LAYERS_DP = {
     EltWiseAdd: QuantizedEltWiseAdd,
     nn.AvgPool2d: QuantizedAvgPool2d,
     nn.AdaptiveAvgPool2d: QuantizedAdaptiveAvgPool2d,
-    nn.BatchNorm2d: nn.Identity
+    nn.BatchNorm2d: nn.Identity,
+    nn.Linear: QuantizedLinear
 }
