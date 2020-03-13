@@ -59,11 +59,8 @@ def test_squeezenet_quant_infer(squeezenet):
 
     with torch.no_grad():
         quant_out = model(quant_transforms(inp).unsqueeze_(0))
-        for layer in reversed(list(model.modules())):
-            if hasattr(layer, 'out_frac_bits'):
-                out_frac_bits = layer.out_frac_bits
-                break
-        rounded_out = quant_out / math.pow(2., out_frac_bits)
+
+        rounded_out = quant_out / math.pow(2., model.classifier[1].out_frac_bits)
 
     np_float_out = float_out.data.cpu().numpy()
     np_rounded_out = rounded_out.data.cpu().numpy()
@@ -96,11 +93,8 @@ def test_mobilenet_v2_quant_infer():
 
     with torch.no_grad():
         quant_out = model(quant_transforms(inp).unsqueeze_(0))
-        for layer in reversed(list(model.modules())):
-            if hasattr(layer, 'out_frac_bits'):
-                out_frac_bits = layer.out_frac_bits
-                break
-        rounded_out = quant_out / math.pow(2., out_frac_bits)
+
+        rounded_out = quant_out / math.pow(2., model.classifier.out_frac_bits)
 
     np_float_out = float_out.data.cpu().numpy()
     np_rounded_out = rounded_out.data.cpu().numpy()

@@ -146,8 +146,6 @@ class QuantizedLinear(nn.Linear):
         out = gap8_clip(roundnorm_reg(out, self.norm), self.bits)
         out += self.bias.view(1, -1).expand_as(out)
         out = torch.clamp(out, -math.pow(2., self.bits - 1), math.pow(2., self.bits) - 1)
-        print('---------------------------------------')
-        print(out)
         return out
 
 
