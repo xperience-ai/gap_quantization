@@ -17,7 +17,7 @@ def module_classes(module):
 
 def get_int_bits(inputs):
     if isinstance(inputs, torch.Tensor):
-        inp_int_bits = [inputs.int_bits]
+        inp_int_bits = [int_bits(inputs)]
     elif isinstance(inputs, (list, tuple)):
         inp_int_bits = []
         for inp in inputs:
