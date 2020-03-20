@@ -7,8 +7,13 @@ from urllib.parse import urlparse
 import torch
 import torch.nn as nn
 import torch.utils.model_zoo as model_zoo
+from PIL import Image
 from torch.utils.data import Dataset
 from torchvision.datasets.folder import IMG_EXTENSIONS
+
+
+def pil_loader(image_path):
+    return Image.open(image_path).convert('RGB')
 
 
 def module_classes(module):
@@ -31,7 +36,7 @@ def get_int_bits(inputs):
 def set_param(tensor, name, val):
     if isinstance(tensor, torch.Tensor):
         setattr(tensor, name, val)
-    elif isinstance(tensor, tuple):
+    elif isinstance(tensor, (tuple, list)):
         for idx, _ in enumerate(tensor):
             setattr(tensor[idx], name, val)
     else:
@@ -76,11 +81,10 @@ def gap_round(inp, float_bits, bits=16):
 
 class Folder(Dataset):
     def __init__(self, data_source, loader, transform):
-        self.images_list = [
-            osp.join(data_source, image_name)
-            for image_name in os.listdir(data_source)
-            if osp.splitext(image_name)[1].lower() in IMG_EXTENSIONS
-        ]
+        self.images_list = []
+        for root, _, image_names in os.walk(data_source):
+            for image_name in image_names:
+                self.images_list.append(osp.join(root, image_name))
         self.transform = transform
         self.loader = loader
 
@@ -122,7 +126,7 @@ def is_bn(module):
 
 
 def is_absorbing(module):
-    return isinstance(module, nn.Conv2d)
+    return isinstance(module, (nn.Conv2d, nn.Conv1d))
 
 
 def merge_batch_norms(model):

@@ -40,6 +40,7 @@ def concat_quant(module, cfg):
 
 LAYER_QUANTIZERS = {
     nn.Conv2d: conv_quant,
+    nn.Conv1d: conv_quant,
     Concat: concat_quant,
     EltWiseAdd: concat_quant,
     nn.Linear: conv_quant

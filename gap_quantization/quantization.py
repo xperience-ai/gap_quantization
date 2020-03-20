@@ -3,6 +3,7 @@ import logging
 import math
 import os
 import os.path as osp
+import warnings
 from functools import partial
 
 import torch
@@ -22,6 +23,7 @@ from gap_quantization.utils import (
     int_bits,
     merge_batch_norms,
     module_classes,
+    pil_loader,
     roundnorm_reg,
     set_param,
 )
@@ -31,12 +33,16 @@ def save_act_hook(module, inp, output, save_dir, name, rounded):
 
     if isinstance(inp, (tuple, list)) and len(inp) == 1:
         inp = inp[0]
-    try:
-        inp = inp.data.cpu().numpy().tolist()
-    except AttributeError:
-        # if verbose:
-        #     print("module {} was ignored".format(name))
-        return
+    if isinstance(inp, torch.Tensor):
+        inp_to_save = inp.data.cpu().numpy().tolist()
+    elif isinstance(inp, (tuple, list)):
+        inp_to_save = []
+        for inp_tensor in inp:
+            inp_to_save.append(inp_tensor.cpu().data.numpy().tolist())
+    else:
+        warnings.warn(
+            "{} has unknown type of input: {}. torch.Tensor, list or tuple are expected. Input wasn\'t saved".
+            format(module.__class__.__name__, inp.__class__.__name__))
 
     if rounded:
         if hasattr(module, 'out_frac_bits'):
@@ -54,12 +60,12 @@ def save_act_hook(module, inp, output, save_dir, name, rounded):
     os.makedirs(os.path.join(save_dir, name), exist_ok=True)
     with open(os.path.join(save_dir, name, 'input.json'), 'w') as inp_f, \
             open(os.path.join(save_dir, name, 'output.json'), 'w') as out_f:
-        json.dump(inp, inp_f)
+        json.dump(inp_to_save, inp_f)
         json.dump(out_to_save, out_f)
 
 
 def stats_hook(module, inputs, output):
-    inp_int_bits = get_int_bits(inputs)
+    inp_int_bits = get_int_bits(inputs[0])
 
     if not hasattr(module, 'inp_int_bits'):
         module.inp_int_bits = inp_int_bits
@@ -68,7 +74,7 @@ def stats_hook(module, inputs, output):
             if new_inp_int_bits > curr_inp_int_bits:
                 module.inp_int_bits[idx] = new_inp_int_bits
 
-    if isinstance(module, nn.Conv2d):
+    if isinstance(module, (nn.Conv2d, nn.Conv1d)):
         out_int_bits = int_bits(output)
     else:
         out_int_bits = max(inp_int_bits)
@@ -94,7 +100,7 @@ def getattr_rec(obj, attr_list):
 
 
 def shift_concat_input(module, grad_input, grad_output):
-    if isinstance(module, nn.Conv2d) and first_element(grad_output[0]):
+    if isinstance(module, (nn.Conv2d, nn.Conv1d)) and first_element(grad_output[0]):
         shift = first_element(grad_output[0])
         print('shifted module {} by {} bits'.format(module.__class__.__name__, shift))
         module.norm += shift
@@ -157,7 +163,7 @@ class ModelQuantizer():
         self.collect_stats()
         self.quantize_parameters_rec(self.model)
         self.set_parameters_rec(self.model)
-        self.fix_alignment()
+        #self.fix_alignment() Need to make fix_alignment step optional!
 
         if self.cfg['quantize_forward']:
             self.quantize_forward_rec(self.model)
@@ -173,7 +179,8 @@ class ModelQuantizer():
         for module in self.model.modules():
             backward_hooks.append(module.register_backward_hook(shift_concat_input))
 
-        inp = torch.rand((1, self.cfg['num_input_channels'], 224, 224))
+        inp = torch.rand((1, self.cfg['num_input_channels'], 224,
+                          224))  # we need to set resolution if we have FC in our model
         out = self.model(inp)
         self.model.zero_grad()
         if isinstance(out, tuple):
@@ -277,6 +284,8 @@ class ModelQuantizer():
 
         dataset = Folder(self.cfg['data_source'], self.loader, self.transform)
 
+        if not dataset:
+            raise FileNotFoundError("No files were found for the dataset")
         if self.cfg['verbose']:
             logging.info('{} images are used to collect statistics'.format(len(dataset)))
 
@@ -306,24 +315,26 @@ class ModelQuantizer():
         if self.cfg['use_gpu']:
             self.model.cpu()
 
-    def dump_activations(self, image_path, transforms, rounded=False, save_dir=None):
+    def dump_activations(self, image_path, transforms, loader=pil_loader, rounded=False, save_dir=None):
         if save_dir is None:
             save_dir = os.path.join(self.cfg['save_folder'], 'activations_dump')
         handles = []
         for name, module in self.model.named_modules():
-            if module.__class__ not in module_classes(gap_quantization.layers):
+            if isinstance(module,
+                          gap_quantization.layers.EltWiseAdd) or module.__class__ not in module_classes(
+                              gap_quantization.layers):
                 hook = partial(save_act_hook, save_dir=save_dir, name=name, rounded=rounded)
                 handles.append(module.register_forward_hook(hook))
 
         self.model.eval()
 
-        img = Image.open(image_path).convert('RGB')
+        img = loader(image_path)
         tensor = transforms(img)
 
         if self.cfg['use_gpu']:
             tensor = tensor.cuda()
 
-        _ = self.model(tensor.unsqueeze_(0))
+        _ = self.model(tensor)  #.unsqueeze_(0))
 
         for handle in handles:  # delete forward hooks
             handle.remove()

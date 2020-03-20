@@ -84,6 +84,71 @@ class QuantizedConv2d(nn.Conv2d):
         return out
 
 
+class QuantizedConv1d(nn.Conv1d):
+    def __init__(self,
+                 in_channels=1,
+                 out_channels=1,
+                 kernel_size=3,
+                 stride=1,
+                 padding=0,
+                 dilation=1,
+                 groups=1,
+                 bias=True,
+                 bits=16,
+                 **kwargs):  # pylint: disable=unused-argument
+        super(QuantizedConv1d, self).__init__(in_channels, out_channels, kernel_size, stride, padding,
+                                              dilation, groups, bias)
+        self.bits = bits
+
+    def forward(self, inputs):
+        self.weights = nn.ParameterList(  # pylint: disable=attribute-defined-outside-init
+            [nn.Parameter(self.weight.data[:, i, :].unsqueeze_(1)) for i in range(self.weight.shape[1])])
+        out = None
+        for i in range(inputs.shape[1]):
+            conv_res = F.conv1d(inputs[:, i, :].unsqueeze_(1), self.weights[i], None, self.stride,
+                                self.padding, self.dilation, self.groups)
+            tmp = gap8_clip(roundnorm_reg(conv_res, self.norm), self.bits)
+            if out is None:
+                out = tmp
+            else:
+                out += tmp
+        out += self.bias.view(1, -1, 1).expand_as(out)
+        out = torch.clamp(out, -math.pow(2., self.bits - 1), math.pow(2., self.bits) - 1)
+        return out
+
+
+class QuantizedConv1dDP(nn.Conv1d):
+    def __init__(self,
+                 in_channels=1,
+                 out_channels=1,
+                 kernel_size=3,
+                 stride=1,
+                 padding=0,
+                 dilation=1,
+                 groups=1,
+                 bias=True,
+                 bits=16,
+                 **kwargs):  # pylint: disable=unused-argument
+        super(QuantizedConv1dDP, self).__init__(in_channels, out_channels, kernel_size, stride, padding,
+                                                dilation, groups, bias)
+        self.bits = bits
+
+    def forward(self, inputs):
+        self.weights = nn.ParameterList(  # pylint: disable=attribute-defined-outside-init
+            [nn.Parameter(self.weight.data[:, i, :].unsqueeze_(1)) for i in range(self.weight.shape[1])])
+        out = None
+        for i in range(inputs.shape[1]):
+            conv_res = F.conv1d(inputs[:, i, :].unsqueeze_(1), self.weights[i], None, self.stride,
+                                self.padding, self.dilation, self.groups)
+            if out is None:
+                out = conv_res
+            else:
+                out += conv_res
+        out += (self.bias * math.pow(2, self.norm)).view(1, -1, 1).expand_as(out)
+        out = gap8_clip(roundnorm_reg(out, self.norm), self.bits)
+        return out
+
+
 class QuantizedConv2dDP(nn.Conv2d):
     def __init__(self,
                  in_channels=1,
@@ -130,9 +195,8 @@ class QuantizedEltWiseAdd(EltWiseAdd):
     def __init__(self, **kwargs):  # pylint: disable=unused-argument
         super(QuantizedEltWiseAdd, self).__init__()
 
-    def forward(self, inp1, inp2):
-        inputs = [inp1, inp2]
-        for idx, _ in enumerate([inp1, inp2]):
+    def forward(self, inputs):
+        for idx, _ in enumerate(inputs):
             inputs[idx] = roundnorm_reg(inputs[idx], self.norm[idx])
         return torch.stack(inputs, dim=0).sum(dim=0)
 
@@ -141,16 +205,16 @@ class QuantizedLinear(nn.Linear):
     def __init__(self, in_features, out_features, bias=True, **kwargs):  # pylint: disable=unused-argument
         super(QuantizedLinear, self).__init__(in_features, out_features, bias)
 
-    def forward(self, inp1):
-        out = F.linear(inp1, self.weight)
-        out = gap8_clip(roundnorm_reg(out, self.norm), self.bits)
-        out += self.bias.view(1, -1).expand_as(out)
-        out = torch.clamp(out, -math.pow(2., self.bits - 1), math.pow(2., self.bits) - 1)
-        return out
+    def forward(self, inputs):
+        fc_res = F.linear(inputs, self.weight)
+        if self.bias is not None:
+            fc_res += self.bias * math.pow(2., self.norm)
+        return gap8_clip(roundnorm_reg(fc_res, self.norm), self.bits)
 
 
 QUANTIZED_LAYERS = {
     nn.Conv2d: QuantizedConv2d,
+    nn.Conv1d: QuantizedConv1d,
     Concat: QuantizedConcat,
     EltWiseAdd: QuantizedEltWiseAdd,
     nn.AvgPool2d: QuantizedAvgPool2d,
@@ -161,6 +225,7 @@ QUANTIZED_LAYERS = {
 
 QUANTIZED_LAYERS_DP = {
     nn.Conv2d: QuantizedConv2dDP,
+    nn.Conv1d: QuantizedConv1dDP,
     Concat: QuantizedConcat,
     EltWiseAdd: QuantizedEltWiseAdd,
     nn.AvgPool2d: QuantizedAvgPool2d,
