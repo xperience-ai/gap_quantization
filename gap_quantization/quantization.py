@@ -307,7 +307,7 @@ class ModelQuantizer():
                     imgs.int_bits = int_bits(imgs)
                 if self.cfg['use_gpu']:
                     imgs = imgs.cuda()
-                _ = self.model(imgs)
+                _ = self.model(imgs.squeeze_(0))
 
         for handle in handles:  # delete forward hooks
             handle.remove()
