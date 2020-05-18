@@ -94,6 +94,8 @@ def shift_concat_input(module, grad_input, grad_output):
         module.norm += shift
         module.bias = nn.Parameter(roundnorm_reg(module.bias, shift))
         grad_input = tuple(torch.zeros_like(tensor) for tensor in grad_input)
+        module.out_frac_bits[0] -= shift
+        module.b_frac_bits[0] -= shift
     elif grad_output[0].sum() != 0:
         tmp = []
         for tensor in grad_input:
