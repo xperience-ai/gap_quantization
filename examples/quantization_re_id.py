@@ -9,6 +9,7 @@ import torch
 from PIL import Image
 from torchvision.transforms import Compose, Grayscale, Normalize, Resize, ToTensor
 
+from gap_quantization.dump_utils import create_norm_list, remove_cat_files, remove_extra_dump
 from gap_quantization.models.squeezenet1_1 import squeezenet1_1
 from gap_quantization.quantization import ModelQuantizer
 from gap_quantization.transforms import QuantizeInput, ToTensorNoNorm
@@ -90,59 +91,10 @@ def main():
     rounded_out = quant_out / math.pow(2., out_frac_bits)  # pylint: disable=unused-variable
     print(rounded_out)
 
-    dict_norm = {}
-    for file in os.listdir(cfg['save_folder']):
-        if file != 'activations_dump' and not re.match('.*cat.json', file):
-            dict_norm[file] = round(read_norm(os.path.join(cfg['save_folder'], file)))
-
-    list_norm = make_list_from_dict(dict_norm, convbn)
-    txt_list = open('norm_list.h', 'w')
-    for i in range(0, 26):
-        txt_list.write("#define NORM_" + str(i) + " " + str(list_norm[i]) + "\n")
-
+    create_norm_list(cfg['save_folder'], convbn)
     if convbn:
         remove_extra_dump(os.path.join(cfg['save_folder'], 'activations_dump'))
-
     remove_cat_files(cfg['save_folder'])
-
-
-def read_norm(file):
-    with open(file, "rt") as js_file:
-        data = json.load(js_file)
-    norm = data['norm'][0]
-    return norm
-
-
-def make_list_from_dict(norm_dict, bn):
-    norm_list = []
-    if bn:
-        norm_list.extend([norm_dict['conv1.0.json'], norm_dict['features.0.0.json']])
-        features_names_list = ['.squeeze.0.json', '.expand1x1.0.json', '.expand3x3.0.json']
-    else:
-        norm_list.extend([norm_dict['conv1.json'], norm_dict['features.0.json']])
-        features_names_list = ['.squeeze.json', '.expand1x1.json', '.expand3x3.json']
-    for i in [3, 4, 6, 7, 9, 10, 11, 12]:
-        for feature_name in features_names_list:
-            norm_list.extend([norm_dict['features.' + str(i) + feature_name]])
-    return norm_list
-
-
-def remove_extra_dump(directory):
-    extra_list = ['conv1', 'conv1.1', 'features.0', 'features.0.1']
-    features_names_list = [
-        '.squeeze', '.squeeze.1', '.expand1x1', '.expand1x1.1', '.expand3x3', '.expand3x3.1'
-    ]
-    for i in [3, 4, 6, 7, 9, 10, 11, 12]:
-        for feature_name in features_names_list:
-            extra_list.append('features.' + str(i) + feature_name)
-    for folder in os.listdir(directory):
-        if folder in extra_list:
-            shutil.rmtree(os.path.join(directory, folder))
-
-
-def remove_cat_files(directory):
-    for i in [3, 4, 6, 7, 9, 10, 11, 12]:
-        os.remove(os.path.join(directory, 'features.' + str(i) + ".cat.json"))
 
 
 if __name__ == '__main__':
