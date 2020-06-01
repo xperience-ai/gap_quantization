@@ -10,7 +10,7 @@ import torch.nn as nn
 #from urllib.parse import urlparse
 
 
-def create_norm_list(save_dir, convbn):
+def dump_quant_params(save_dir, convbn):
     dict_norm = {}
     for file in os.listdir(save_dir):
         if file != 'activations_dump' and not re.match('.*cat.json', file) and not re.match('.*txt', file):

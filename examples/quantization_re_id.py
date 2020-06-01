@@ -9,7 +9,7 @@ import torch
 from PIL import Image
 from torchvision.transforms import Compose, Grayscale, Normalize, Resize, ToTensor
 
-from gap_quantization.dump_utils import create_norm_list, remove_cat_files, remove_extra_dump
+from gap_quantization.dump_utils import dump_quant_params, remove_cat_files, remove_extra_dump
 from gap_quantization.models.squeezenet1_1 import squeezenet1_1
 from gap_quantization.quantization import ModelQuantizer
 from gap_quantization.transforms import QuantizeInput, ToTensorNoNorm
@@ -91,7 +91,7 @@ def main():
     rounded_out = quant_out / math.pow(2., out_frac_bits)  # pylint: disable=unused-variable
     print(rounded_out)
 
-    create_norm_list(cfg['save_folder'], convbn)
+    dump_quant_params(cfg['save_folder'], convbn)
     if convbn:
         remove_extra_dump(os.path.join(cfg['save_folder'], 'activations_dump'))
     remove_cat_files(cfg['save_folder'])
