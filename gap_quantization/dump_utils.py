@@ -14,27 +14,22 @@ def dump_quant_params(save_dir, convbn):
     dict_norm = {}
     for file in os.listdir(save_dir):
         if file != 'activations_dump' and not re.match('.*cat.json', file) and not re.match('.*txt', file):
-            dict_norm[file] = read_norm(os.path.join(save_dir, file))
+            dict_norm[file] = read_quant_params(os.path.join(save_dir, file))
     list_norm = make_list_from_dict(dict_norm, convbn)
-    txt_list = open('param_layer_quant.h', 'w')
-    for i in range(0, 26):
-        txt_list.write("#define Q_IN_" + '{:<8}'.format(str(i)) + str(list_norm[i]['q_in']) + "\n")
-        txt_list.write("#define Q_OUT_" + '{:<7}'.format(str(i)) + str(list_norm[i]['q_out']) + "\n")
-        txt_list.write("#define Q_WEIGHTS_" + '{:<3}'.format(str(i)) + str(list_norm[i]['q_weights']) + "\n")
-        txt_list.write("#define Q_BIAS_" + '{:<6}'.format(str(i)) + str(list_norm[i]['q_bias']) + "\n")
-        txt_list.write("\n")
+    with open('param_layer_quant.h', 'w') as txt_list:
+        for i in range(0, 26):
+            print("#define Q_IN_{:<8}{}".format(i, list_norm[i]['inp_frac_bits']), file=txt_list)
+            print("#define Q_OUT_{:<7}{}".format(i, list_norm[i]['out_frac_bits']), file=txt_list)
+            print("#define Q_WEIGHTS_{:<3}{}".format(i, list_norm[i]['w_frac_bits']), file=txt_list)
+            print("#define Q_BIAS_{:<6}{}".format(i, list_norm[i]['b_frac_bits']), file=txt_list)
+            print("", file=txt_list)
 
 
-def read_norm(file):
+def read_quant_params(file):
     print(file)
-    with open(file, "rt") as js_file:
-        data = json.load(js_file)
-    param_dict = {}
-    param_dict['norm'] = int(data['norm'][0])
-    param_dict['q_in'] = int(data['inp_frac_bits'][0])
-    param_dict['q_out'] = int(data['out_frac_bits'][0])
-    param_dict['q_weights'] = int(data['w_frac_bits'][0])
-    param_dict['q_bias'] = int(data['b_frac_bits'][0])
+    with open(file) as json_file:
+        data = json.load(json_file)
+    param_dict = {key: int(val[0]) for (key, val) in data.items() if key not in ('weight' or 'bias')}
     return param_dict
 
 
