@@ -1,5 +1,5 @@
 Pillow==6.2.2
-setuptools==41.2.0
+setuptools==65.5.1
 torch==1.2.0
 torchvision==0.4.0
 tqdm==4.36.1
